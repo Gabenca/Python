@@ -1,3 +1,4 @@
+
 import os
 import re
 import json
@@ -11,10 +12,37 @@ import statistics
 import collections
 from tqdm import tqdm
 from bs4 import BeautifulSoup
+from filtervocabulary import vocabulary
+from credentials import mongo_credentials
+
+def profile(func):
+    """Decorator for run function profile"""
+    def wrapper(*args, **kwargs):
+        profile_filename = func.__name__ + '.prof'
+        profiler = cProfile.Profile()
+        result = profiler.runcall(func, *args, **kwargs)
+        profiler.dump_stats(profile_filename)
+        return result
+    return wrapper
+
 
 class VacancyHandler:
-    ''' Сlass is designed to collect and analyze information about vacancies
-    from HeadHunter REST API '''
+    '''
+    ----------------------------------------------------
+    Class is designed to collect and analyze information
+      about vacancies retrieved from HeadHunter REST API 
+
+    Public methods:
+
+        exclude_by_region(exclude_geo_area)
+        include_by_region(include_geo_area)
+        unpickle_vacancies(filesystem_store_path)
+        analyze()
+        pickle_vacancies()
+        store_vacancies_to_mongo()
+        store_results_to_xlsx()
+    ----------------------------------------------------        
+    '''
 
 #---------------------------------------------------------------------------------------------------------
 #---Initializations---------------------------------------------------------------------------------------
@@ -23,19 +51,8 @@ class VacancyHandler:
     # Base HeadHunter API-url for vacancy retrievement
     api_url = 'https://api.hh.ru/vacancies'
 
-    # Azure CosmoDB db connection string
-    mongo_credentials = ('mongodb://1b145613-0ee0-4-231-b9ee:7w3yd'
-                         'n0e2aNuqOTCqxa99hHwJcF4kPrkAmEKFtiDHaR1u'
-                         'LOca0u25CcEASZnKk1YJHnqfEs1JyPrHe4gEAFkg'
-                         'g==@1b145613-0ee0-4-231-b9ee.documents.a'
-                         'zure.com:10255/?ssl=true&replicaSet=glob'
-                         'aldb')
-
     # Select certain 'hh_vacancies' db in mongo
-    ##mongo_client = pymongo.MongoClient(mongo_credentials)
-    ##mongo_db = mongo_client.hh_vacancies
     mongo_db = pymongo.MongoClient(mongo_credentials).hh_vacancies
-
 
     def __init__(self,
                 # Text to be searched in vacancy to establish a match condition.
@@ -48,7 +65,7 @@ class VacancyHandler:
                 # Russia(113), Novosibirsk(1202), Moscow(1) region
                 geo_areas=['1202',]):
         
-         #Global path to store pickles and results
+        # Global path to store pickles and results
         self.store_path = 'D:/store'
 
         # Text to be searched in vacancy to establish a match condition.
@@ -138,6 +155,8 @@ class VacancyHandler:
             'Более 90000' : 0
             }
 
+        self.salaries_by_region = None
+
         # Top of 'strong's' dictionary corpus,
         # formed from lots of batches of different vacancies retrieved previously
         self.description_sections_top = frozenset({
@@ -146,62 +165,6 @@ class VacancyHandler:
             'Условия',
             'Мы предлагаем',
         })
-
-        self.filter_vocabulary = {
-
-            'Тренды': frozenset({'hi-po',
-                                 'agile',
-                                 'digital',
-                                 'эмпатия',
-                                 'коучинг',
-                                 'лидерство',
-                                 'коллаборация',
-                                 'осознанное влияние',
-                                 'креативность мышления',
-                                 'эмоциональный интеллект',
-                                 'управление эффективностью',}),
-
-            'Знания': frozenset({'знание',
-                                 'умение',
-                                 'навыки',}),
-
-            'Интегратор': frozenset({'честность',
-                                     'командная работа',
-                                     'коммуникабельность',
-                                     'командное лидерство',
-                                     'установление контактов',
-                                     'управление конфликтами',
-                                     'разделение ответственности',
-                                     'организаторские способности',}),
-
-            'Производитель': frozenset({'активность',
-                                        'целеустремленность',
-                                        'последовательность',
-                                        'уверенность в себе',
-                                        'установка на обучение',
-                                        'понимание организации',
-                                        'аналитическое мышление',
-                                        'ориентация на результат',
-                                        'энергетический потенциал',
-                                        'профессиональная ответственность',}),
-
-            'Администратор': frozenset({'информирование',
-                                        'корпоративность',
-                                        'влияние и воздействие',
-                                        'ориентация на стандарт',
-                                        'концептуальность мышления',
-                                        'организованность стресс менеджмент',}),
-
-            'Предприниматель': frozenset({'гибкость',
-                                          'адаптируемость',
-                                          'принятие решения',
-                                          'управление рисками',
-                                          'инновационное мышление',
-                                          'управление изменениями',
-                                          'клиенториентированность',
-                                          'стратегическое мышление',
-                                          'предпринимательский подход',}),
-        }
 
         # Request to API parameters
         self.search_parameters = {
@@ -217,11 +180,12 @@ class VacancyHandler:
         # Search arguments returned by HH server
         self.search_arguments = None
 
-        if search_field: self.search_parameters['search_field'] = search_field
-        #if search_area: self.search_parameters['area'] = search_area
+        if search_field:
+            self.search_parameters['search_field'] = search_field
+        ##if search_area: self.search_parameters['area'] = search_area
 
-        #Determines when the class instance is freshly created
-        #and actually does not contain vacancies yet
+        # Determines when the class instance is freshly created
+        # and actually does not contain vacancies yet
         self.__initial = True
 
     def __len__(self):
@@ -239,7 +203,7 @@ class VacancyHandler:
 #---------------------------------------------------------------------------------------------------------
 
     # Retrieve vacancies from HH
-    #---------------------------------------------------------------------------------------------------------
+    #-----------------------------------------------------------------------------------------------------
     def _vacancies_retriever(self, delay, number):
 
         brief_vacancies = []
@@ -250,7 +214,8 @@ class VacancyHandler:
 
         while current_page < pages_count:
             self.search_parameters['page'] = current_page
-            raw_response = requests.get(VacancyHandler.api_url, params = self.search_parameters)
+            raw_response = requests.get(VacancyHandler.api_url,
+                                        params = self.search_parameters)
             response = raw_response.json()
             brief_vacancies += response.get('items')
             if number is None: pages_count = response.get('pages')
@@ -283,14 +248,14 @@ class VacancyHandler:
         # Now the class instance already contains actual vacancies
         self.__initial = False
 
-
     # Announces general information on the response to the request
     # Asks for confirmation for the full retrievement
-    # Start full retrievement if confirmed
-    #---------------------------------------------------------------------------------------------------------
+    # Start full retrievement, if confirmed
+    #----------------------------------------------------------------------------------------------------
     def _retrievement_confirmator(self):
 
-        raw_response = requests.get(VacancyHandler.api_url, params = self.search_parameters)
+        raw_response = requests.get(VacancyHandler.api_url,
+                                    params = self.search_parameters)
         response = raw_response.json()
         pages_count = response.get('pages')
         
@@ -319,181 +284,141 @@ class VacancyHandler:
             print(f"\n\n")
             self._vacancies_retriever(delay, number)
 
-
 #---------------------------------------------------------------------------------------------------------
 #---Filters-----------------------------------------------------------------------------------------------
 #---------------------------------------------------------------------------------------------------------
 
-    # Exclude vacancies by 'exclude' criteria from all vacancies batch
     def exclude_by_region(self, exclude):
-
+        '''Exclude vacancies by 'exclude' criteria from all vacancies batch'''
         self.vacancies = [vacancy
             for vacancy in self.vacancies
                 if vacancy.get('area').get('name') != exclude]
 
-
-    # Include vacancies by 'include' criteria from all vacancies batch
+    #-----------------------------------------------------------------------------------------------------
     def include_by_region(self, include):
-
+        '''Include vacancies by 'include' criteria from all vacancies batch'''
         self.vacancies = [vacancy
             for vacancy in self.vacancies
                 if vacancy.get('area').get('name') == include]
-
 
 #---------------------------------------------------------------------------------------------------------
 #---Store-------------------------------------------------------------------------------------------------
 #---------------------------------------------------------------------------------------------------------
 
-    # Store object 'vacancies' into file located in 'store_path' path
-    #---------------------------------------------------------------------------------------------------------
-    def pickle_vacancies(self):
-
-        with open(f"{self.store_path}/{self.search_parameters.get('text')}.pickle", 'wb') as file:
+    def pickle_vacancies(self, path=None):
+        '''Store object 'vacancies' into file located in "path"'''
+        file_name = f"{self.search_parameters.get('text')}.pickle"
+        if path is None:
+            path = f"{self.store_path}/"
+        file_path = path + file_name
+        with open(file_path, 'wb') as file:
             pickle.dump(self.vacancies, file)
 
-
-    # Restore object 'vacancies' from file located in 'store_path' path
-    #---------------------------------------------------------------------------------------------------------
-    def unpickle_vacancies(self, store_path):
-        with open(store_path, 'rb') as file:
+    #-----------------------------------------------------------------------------------------------------
+    def unpickle_vacancies(self, path):
+        '''Restore object 'vacancies' from file located in "path"'''
+        with open(path, 'rb') as file:
             self.vacancies += pickle.load(file)
-        
         # Now the class instance already contains actual vacancies
         self.__initial = False
 
-
-    # Stores vacancies to mongodb
-    #---------------------------------------------------------------------------------------------------------
-    def store_to_mongo(self):
-
+    #-----------------------------------------------------------------------------------------------------
+    def store_vacancies_to_mongo(self):
+        '''Store vacancies to mongodb'''
         # Create collection with vacancies occupation name stored in 'search_criteria'
         collection = VacancyHandler.mongo_db[self.search_criteria]
         # Stores insert results in variable
-        insert_result = collection.insert_many(self.vacancies)
-        ##cursor = collection.find({'salary.from': {'$gt': 30000}})
-
+        collection.insert_many(self.vacancies)
 
 #---------------------------------------------------------------------------------------------------------
-#---Results---------------------------------------------------------------------------------------
+#---Results-----------------------------------------------------------------------------------------------
 #---------------------------------------------------------------------------------------------------------
- 
-    # Store analyze results into xlsx file 'search_criteria-vacancies_amount.xlsx'
-    # located in 'store_path' path
-    #---------------------------------------------------------------------------------------------------------
+
     def store_results_to_xlsx(self):
+        '''Store analysis result into xlsx file
+        'search_criteria-vacancies_amount.xlsx'
+        located in 'store_path' path'''
 
         def form_sheet(data, columns, name):
             sheet = pandas.DataFrame(data, columns=columns)
             sheet.to_excel(writer, name, index=False)
 
-        writer = pandas.ExcelWriter(f'{self.store_path}/{self.search_criteria}-{len(self.vacancies)}.xlsx')
-
-        form_sheet(self.vacancy_names, ['Название должности', 'Вхождений'], 'Должности')
-        form_sheet(self.skills_all, ['Ключевые навыки (тэги)', 'Вхождений'], 'Ключевые навыки (тэги)')
-        form_sheet(self.experience, ['Требуемый опыт', 'Вхождений'], 'Опыт')
-        form_sheet(self.keywords_all, ['Продукты|Технологии', 'Вхождений'], 'Продукты|Технологии')
-        form_sheet(self.employers_brief.items(), ['Работодатель', 'Ссылка'], 'Работодатели')
-        form_sheet(self.regions, ['Регион', 'Вхождений'], 'Регионы')
-        form_sheet(self.profareas, ['Профобласть', 'Вхождений'], 'Укрупнённые профобласти')
-        form_sheet(self.profareas_granular, ['Специализация', 'Вхождений'], 'Специализации профобластей')
-        form_sheet(self.salary_groups.items(), ['Диапазон', 'Вхождений'], 'Зарплатные группы')
-        form_sheet([(self.average_salary, self.median_salary, self.modal_salary),],
-                   ['Средняя зарплата', 'Медианная зарплата', 'Модальная зарплата'], 'Зарплата')
-
-        for criteria in self.filter_vocabulary['Знания']:
-            form_sheet(set(self._by_word_extractor(criteria)),
-                       [criteria.capitalize()],
-                       criteria.capitalize())
-
-        for criteria in self.description_elements_top:
-            form_sheet(set(self.description_elements_top.get(criteria)),
-                       [criteria.capitalize()],
-                       criteria.capitalize())
+        table_structure = {
+            'Должности': ['Название должности', 'Количество вакансий'],
+            'Ключевые навыки': ['Ключевые навыки (тэги)', 'Вакансий'],
+            'Опыт': ['Требуемый опыт', 'Вакансий'],        
+            'Технологии': ['Продукты|Технологии', 'Вакансий'],        
+            'Работодатели': ['Работодатель', 'Ссылка'],
+            'Регионы': ['Регион', 'Вакансий'],
+            'Профобласти': ['Профобласть', 'Вакансий'],
+            'Специализации': ['Специализация', 'Вакансий'],
+            'Группы': ['Диапазон', 'Вакансий'],
+            'Зарплата': ['Средняя зарплата', 'Медианная зарплата', 'Модальная зарплата'],
+        }
         
-        form_sheet(self.wordbags_all, ['Слово', 'Вхождений'], 'Мешок слов')
-
-        writer.save()
-
-
-    # Store custom properties (skills, keywords, etc) into text files located in 'store_path' path
-    #---------------------------------------------------------------------------------------------------------
-    def store_results_to_files(self):
-
-        self._store_results_text(self.skills_all, 'Навыки')
-        self._store_results_text(self.keywords_all, 'Слова')
-        self._store_results_text(self.experience, 'Опыт')
-        self._store_results_text(self.description_elements, 'Категории (Топ)', sort=True)
-        self._store_results_text(self.wordbags, 'Мешки слов')
-        self._store_extracted_granular()
-
-
-    # Store arbitrary result stuff into text files located in 'store_path' path
-    #---------------------------------------------------------------------------------------------------------
-    def _store_results_text(self, object_tobe_saved, filename, sort=False):
-
-        def store_dict_text(dict_tobe_saved):
-            # Files will be named after dict keys
-            new_store_path = self.store_path + '/' + filename
-            os.makedirs(new_store_path, exist_ok=True)
-            
-            for file_name, content in dict_tobe_saved.items():
-                if content:
-                    with open(f"{new_store_path}/{file_name}.txt", 'w', encoding='utf8') as file:
-                        if sort is True:
-                            file.write("\n".join(sorted([str(item)
-                                for item in content], key=len)))
-                        else:
-                            file.write("\n".join([str(item)
-                                for item in content]))
+        path = f'{self.store_path}/{self.search_criteria}-{len(self.vacancies)}.xlsx'
         
-        def store_list_text(list_tobe_saved):
-            if list_tobe_saved:
-                with open(f"{self.store_path}/{filename}.txt", 'w', encoding='utf8') as file:
-                        if sort is True:
-                            file.write("\n".join(sorted([str(item)
-                                for item in list_tobe_saved], key=len)))
-                        else:
-                            file.write("\n".join([str(item)
-                                for item in list_tobe_saved]))
+        with pandas.ExcelWriter(path) as writer:
 
-        if type(object_tobe_saved) is dict:
-            store_dict_text(object_tobe_saved)
-        elif type(object_tobe_saved) is list:
-            store_list_text(object_tobe_saved)
+            form_sheet(self.vacancy_names, table_structure['Должности'], 'Должности')
+            form_sheet(self.skills_all, table_structure['Ключевые навыки'],'Ключевые навыки')
+            form_sheet(self.keywords_all, table_structure['Технологии'], 'Технологии')
+            form_sheet(self.regions, table_structure['Регионы'], 'Регионы')
+            form_sheet(self.experience, table_structure['Опыт'], 'Опыт')
+            form_sheet(self.employers_brief.items(), table_structure['Работодатели'], 'Работодатели')
+            form_sheet(self.profareas, table_structure['Профобласти'], 'Профобласти')
+            form_sheet(self.profareas_granular, table_structure['Специализации'], 'Специализации')
+            form_sheet(self.salary_groups.items(), table_structure['Группы'], 'Зарплатные группы')
+            form_sheet([(self.average_salary, self.median_salary, self.modal_salary),],
+                    table_structure['Зарплата'], 'Зарплата')
 
+            for criteria in vocabulary['Знания']:
+                form_sheet(set(self._by_word_extractor(criteria)),
+                        [criteria.capitalize()],
+                        criteria.capitalize())
 
-    # Store 'description_sections_top' filtered by 'filter_vocabulary' to 'store_path' in multiple files
-    #---------------------------------------------------------------------------------------------------------
-    def _store_extracted_granular(self):
-
-        ##_deep_extractor('Знания', 'знание')
-        def deep_extractor(criteria):
+            for criteria in self.description_elements_top:
+                form_sheet(set(self.description_elements_top.get(criteria)),
+                        [criteria.capitalize()],
+                        criteria.capitalize())
             
-            result = [element
-                for element in self.description_elements_all
-                    if criteria in element]
-            
-            return sorted(result, key=len)
+            form_sheet(self.wordbags_all, ['Слово', 'Вхождений'], 'Мешок слов')
 
+#---------------------------------------------------------------------------------------------------------
+#---Analyze-----------------------------------------------------------------------------------------------
+#---------------------------------------------------------------------------------------------------------
 
-        for vocabulary, words in self.filter_vocabulary.items():
-            new_store_path = self.store_path + '/' + vocabulary
-            os.makedirs(new_store_path, exist_ok=True)
-            for criteria in words:
-                store_batch = deep_extractor(criteria)
-                if store_batch:
-                    with open(f"{new_store_path}/{criteria}.txt", 'w', encoding='utf8') as file:
-                        file.write("\n".join(sorted(store_batch, key=len)))
+    ##@profile
+    # Call all analyze methods                        
+    def analyze(self):
 
+        # If class instance doesn't contains actual vacancies
+        if self.__initial: self._retrievement_confirmator()
+        ##if self.__initial: self.vacancies_retriever()
+
+        self._duplicate_vacancies_remover()
+        self._skills_collector()
+        self._experience_collector()
+        self._prof_areas_collector()
+        self._creation_dates_collector()
+        self._vacancy_names_collector()
+        self._regions_collector()
+        self._keywords_extractor()
+        self._description_elements_extractor()
+        self._description_sections_extractor()
+        self._wordbags_extractor()
+        self._unique_counter()
+        self._salary_calculator()
+        self._employers_collector()
 
 #---------------------------------------------------------------------------------------------------------
 #---Collectors--------------------------------------------------------------------------------------------
 #---------------------------------------------------------------------------------------------------------
 
     # Collect key skills
-    #---------------------------------------------------------------------------------------------------------
+    #-----------------------------------------------------------------------------------------------------
     def _skills_collector(self):
-        
+
         raw_key_skills = [vacancy.get('key_skills')
             for vacancy in self.vacancies]
 
@@ -518,43 +443,40 @@ class VacancyHandler:
         
         self.skills = self.skills_all[0:100]
 
-
     # Collect required work experience from vacancies
-    #---------------------------------------------------------------------------------------------------------
+    #-----------------------------------------------------------------------------------------------------
     def _experience_collector(self):
 
         raw_experience = [full_vacancy.get('experience').get('name')
             for full_vacancy in self.vacancies]
-        
+
         # Forms {experience : number of entries}
         experience = {exp : raw_experience.count(exp)
             for exp in raw_experience}
-        
+
         # Sort by number of entries
         self.experience = sorted(experience.items(),
                                  key=lambda x: x[1],
                                  reverse=True)
 
-
     # Collect vacancy names
-    #---------------------------------------------------------------------------------------------------------
+    #-----------------------------------------------------------------------------------------------------
     def _vacancy_names_collector(self):
 
         vacancy_names = [vacancy.get('name').lower()
             for vacancy in self.vacancies]
-        
+
         # Forms {vacancy name : number of entries}
-        vacancy_names_counted = {name : vacancy_names.count(name)
+        vacancy_names_counted = {name.capitalize() : vacancy_names.count(name)
             for name in vacancy_names}
-        
+
         # Sort by number of entries
         self.vacancy_names = sorted(vacancy_names_counted.items(),
                                     key=lambda x: x[1],
                                     reverse=True)
 
-
     # Collect specialization areas from vacancies
-    #---------------------------------------------------------------------------------------------------------
+    #-----------------------------------------------------------------------------------------------------
     def _prof_areas_collector(self):
 
         ##raw_area_ids = [categories.get('id')
@@ -597,10 +519,9 @@ class VacancyHandler:
         self.profareas_granular = sorted(profareas_granular_counted.items(),
                                          key=lambda x: x[1],
                                          reverse=True)
-
     
     # Collect creation dates from vacancies
-    #---------------------------------------------------------------------------------------------------------
+    #-----------------------------------------------------------------------------------------------------
     def _creation_dates_collector(self):
 
         raw_create_dates = [vacancy.get('created_at')
@@ -609,21 +530,20 @@ class VacancyHandler:
         # Sort by date of publication
         self.dates = sorted({date : raw_create_dates.count(date)
             for date in raw_create_dates})
-
     
     # Collect employers
-    #---------------------------------------------------------------------------------------------------------
+    #-----------------------------------------------------------------------------------------------------
     def _employers_collector(self):
 
         self.employers_full = [vacancy.get('employer')
             for vacancy in self.vacancies]
 
-        self.employers_brief = {vacancy.get('employer').get('name') : vacancy.get('employer').get('alternate_url')
+        self.employers_brief = {vacancy.get('employer').get('name') :
+                                vacancy.get('employer').get('alternate_url')
             for vacancy in self.vacancies}
 
-
     # Collect regions
-    #---------------------------------------------------------------------------------------------------------
+    #-----------------------------------------------------------------------------------------------------
     def _regions_collector(self):
 
         regions = [vacancy.get('area').get('name')
@@ -638,20 +558,20 @@ class VacancyHandler:
                                     key=lambda x: x[1],
                                     reverse=True)
 
-
 #---------------------------------------------------------------------------------------------------------
 #---Extractors--------------------------------------------------------------------------------------------
 #---------------------------------------------------------------------------------------------------------
 
     # Wordbags formed from self.description_sections_top, which in turn is
     # Top of 'strong's' dictionary formed from lots of batches of different vacancies
-    #---------------------------------------------------------------------------------------------------------
+    #-----------------------------------------------------------------------------------------------------
     def _wordbags_extractor(self):
 
         def extract_by_criteria(criteria):
             
             if self.description_elements.get(criteria):
-                clear_strings = [re.sub("[^А-Яа-я0-9-.\s]", "", describe_string.lower().strip().strip('.'))
+                clear_strings = [re.sub("[^А-Яа-я0-9-.\s]", "",
+                                        describe_string.lower().strip().strip('.'))
                     for describe_string in self.description_elements.get(criteria)]
 
                 unique_clear_set = set(clear_strings)
@@ -674,11 +594,12 @@ class VacancyHandler:
         
         all_words_in_string = ' '.join(self.description_elements_all)    
         bags_words = collections.Counter(re.findall(r'\w+', all_words_in_string))
-        self.wordbags_all = sorted(bags_words.items(), key=lambda x: x[1], reverse=True)
-
+        self.wordbags_all = sorted(bags_words.items(),
+                                   key=lambda x: x[1],
+                                   reverse=True)
 
     # Extract all english words from vacancy desriptions
-    #---------------------------------------------------------------------------------------------------------
+    #-----------------------------------------------------------------------------------------------------
     def _keywords_extractor(self):
 
         # Texts list from vacancy descriptions
@@ -703,12 +624,13 @@ class VacancyHandler:
             for word in clear_eng_words}
 
         # Sorted by number of entries
-        self.keywords_all = sorted(eng_words_mixed.items(), key=lambda x: x[1], reverse=True)
+        self.keywords_all = sorted(eng_words_mixed.items(),
+                                   key=lambda x: x[1],
+                                   reverse=True)
         self.keywords = self.keywords_all[0:100]
 
-
     # Extract child elements from all subject headings (html 'strongs')
-    #---------------------------------------------------------------------------------------------------------
+    #-----------------------------------------------------------------------------------------------------
     def _description_elements_extractor(self):
 
         # bs4.BeautifulSoup objects list formed from vacancy descriptions
@@ -718,15 +640,15 @@ class VacancyHandler:
         p_tags = [p.text.strip().lower()
             for soup in vacancy_descriptions
                 for p in soup.find_all('p')]
+
         li_tags = [li.text.strip().lower()
             for soup in vacancy_descriptions
                 for li in soup.find_all('li')]
         
         self.description_elements_all = list(set(p_tags + li_tags))
-
     
     # Extract multiple different things from vacancy description bodies
-    #---------------------------------------------------------------------------------------------------------
+    #-----------------------------------------------------------------------------------------------------
     def _description_sections_extractor(self):
 
         # bs4.BeautifulSoup objects list formed from vacancy descriptions
@@ -756,7 +678,9 @@ class VacancyHandler:
             for strong in clear_strongs}
 
         # Sort by number of entries
-        sorted_strongs = sorted(strongs_counted.items(), key=lambda x: x[1], reverse=True)
+        sorted_strongs = sorted(strongs_counted.items(),
+                                key=lambda x: x[1],
+                                reverse=True)
         
         self.description_sections = sorted([strong[0]
             for strong in sorted_strongs], key=len, reverse=True)
@@ -786,52 +710,46 @@ class VacancyHandler:
                     if strong.get_text().count(top):
                     ##if len(strong.findNext().findAll('li')) > 0:
                         try:
-                            self.description_elements_top[top] += [item.text
+                            # Suffix '.lstrip().capitalize()' clarifies but slows down
+                            self.description_elements_top[top] += [item.text.lstrip().capitalize()
                                 for item in strong.findNext().findAll('li')]
                         except AttributeError:
                             pass
-        
        
     # Get python list of list 'description_sections_top' filtered by custom 'filter_vocabulary' key
-    #---------------------------------------------------------------------------------------------------------
+    #-----------------------------------------------------------------------------------------------------
+
+    # Dirty, but fast version
+    ##def _by_word_extractor(self, criteria):
+    ##    result = [element
+    ##        for element in self.description_elements_all
+    ##            if criteria in element]
+    ##    return sorted(result, key=len)
+
+    # Clear, but slow version
     def _by_word_extractor(self, criteria):
-            
-        result = [element
-            for element in self.description_elements_all
-                if criteria in element]
+
+        result = list()   
+
+        for element in self.description_elements_all:
+            if criteria in element:
+                if element:
+                    while element[0].isalpha() == False:
+                        element = element.lstrip(element[0])
+                        if not element:
+                            break
+                    result.append(element.capitalize())
         
         return sorted(result, key=len)
 
-
 #---------------------------------------------------------------------------------------------------------
-#---Misc--------------------------------------------------------------------------------------------------
+#---Calculators-------------------------------------------------------------------------------------------
 #---------------------------------------------------------------------------------------------------------
 
-    # Remove dubplicates in vacancies list
-    #---------------------------------------------------------------------------------------------------------
-    def _duplicate_vacancies_remover(self):
+    # Calculate average, median, modal salaries and group salaries into number of clusters
+    #-----------------------------------------------------------------------------------------------------
+    def _salary_calculator(self):
         
-        unique_vacancies = []
-
-        for vacancy in self.vacancies:
-            if vacancy not in unique_vacancies:
-                unique_vacancies.append(vacancy)
-
-        self.vacancies = unique_vacancies
-
-
-    # Count unique vacancies in vacancies list
-    #---------------------------------------------------------------------------------------------------------
-    def _unique_counter(self):
-
-        self.unique = len({vacancy.get('id')
-            for vacancy in self.vacancies})
-
-
-    # Group salaries into number of clusters
-    #---------------------------------------------------------------------------------------------------------
-    def _group_by_salary(self):
-
         def _get_salary_group(salary):
             return {
                 salary < 20000: 'Менее 20000',
@@ -843,28 +761,27 @@ class VacancyHandler:
                 70000 <= salary < 90000: '70000-90000',
                 90000 <= salary: 'Более 90000'
             }[True]
-
-        for vacancy in self.vacancies:
-            if vacancy.get('salary'):
-                salary = dict(vacancy['salary'])
-                if salary.get('currency') == 'RUR':
-                    if salary.get('gross'):
-                        if salary.get('from'):
-                            salary['from'] = salary['from'] * 0.87
-                        if salary.get('to'):
-                            salary['to'] = salary['to'] * 0.87
-                    if salary.get('from'):
-                        self.salary_groups[_get_salary_group(int(salary.get('from')))] += 1
-                    if salary.get('to'):
-                        self.salary_groups[_get_salary_group(int(salary.get('to')))] += 1
-
-
-    # Calculate average salary
-    #---------------------------------------------------------------------------------------------------------
-    def _average_salary(self):
-
+        
         sum = total = 0
+        salary_all = []
+    
+        regions = [region[0] for region in self.regions]
+    
+        region_salary_dict = {'average_salary': 0,
+                              'median_salary': 0,
+                              'modal_salary': 0,
+                              'sum': 0,
+                              'total': 0,
+                              'salary_all': [],
+                            }
+
+        self.salaries_by_region = {region: region_salary_dict
+            for region in regions}
+
         for vacancy in self.vacancies:
+
+            region = vacancy.get('area').get('name')
+
             if vacancy.get('salary'):
                 salary = dict(vacancy['salary'])
                 if salary.get('currency') == 'RUR':
@@ -874,71 +791,75 @@ class VacancyHandler:
                         if salary.get('to'):
                             salary['to'] = salary['to'] * 0.87
                     if salary.get('from'):
+                        self.salaries_by_region[region]['sum'] += salary.get('from')
+                        self.salaries_by_region[region]['total'] += 1
+                        self.salaries_by_region[region]['salary_all'].append(salary.get('from'))
+                        self.salary_groups[_get_salary_group(int(salary.get('from')))] += 1
+                        salary_all.append(salary.get('from'))
                         sum += salary.get('from')
                         total += 1
                     if salary.get('to'):
+                        self.salaries_by_region[region]['sum'] += salary.get('to')
+                        self.salaries_by_region[region]['total'] += 1
+                        self.salaries_by_region[region]['salary_all'].append(salary.get('to'))                       
+                        self.salary_groups[_get_salary_group(int(salary.get('to')))] += 1
+                        salary_all.append(salary.get('to'))
                         sum += salary.get('to')
                         total += 1
+        
+        self.median_salary = statistics.median(salary_all)
+        
         if total > 0:
             self.average_salary = round(sum/total)
 
+        for region in regions:
+            self.salaries_by_region[region]['median_salary'] = \
+                statistics.median(self.salaries_by_region[region]['salary_all'])
 
-    # Calculate median salary
-    #---------------------------------------------------------------------------------------------------------
-    def _median_salary(self):
-
-        salary_all = []
-        for vacancy in self.vacancies:
-            if vacancy.get('salary'):
-                salary = dict(vacancy['salary'])
-                if salary.get('currency') == 'RUR':
-                    if salary.get('gross'):
-                        if salary.get('from'):
-                            salary['from'] = salary['from'] * 0.87
-                        if salary.get('to'):
-                            salary['to'] = salary['to'] * 0.87
-                    if salary.get('from'):
-                        salary_all.append(salary.get('from'))
-                    if salary.get('to'):
-                        salary_all.append(salary.get('to'))
-
-        self.median_salary = statistics.median(salary_all)
-
-
-    # Calculate modal salary
-    #---------------------------------------------------------------------------------------------------------
-    def _modal_salary(self):
+            if self.salaries_by_region[region]['total'] > 0:
+                self.salaries_by_region[region]['average_salary'] = \
+                    round(self.salaries_by_region[region]['sum'] \
+                        / self.salaries_by_region[region]['total'])
         
+        # Calculate modal salary
         for group, salary in self.salary_groups.items():
             if salary == max(self.salary_groups.values()):
                 self.modal_salary = group
 
+#---------------------------------------------------------------------------------------------------------
+#---Misc--------------------------------------------------------------------------------------------------
+#---------------------------------------------------------------------------------------------------------
+
+    # Remove dubplicates in vacancies list
+    #-----------------------------------------------------------------------------------------------------
+    def _duplicate_vacancies_remover(self):
+
+        unique_vacancies = []
+
+        for vacancy in self.vacancies:
+            if vacancy not in unique_vacancies:
+                unique_vacancies.append(vacancy)
+
+        self.vacancies = unique_vacancies
+
+    # Count unique vacancies in vacancies list
+    #-----------------------------------------------------------------------------------------------------
+    def _unique_counter(self):
+        self.unique = len({vacancy.get('id')
+            for vacancy in self.vacancies})
 
 #---------------------------------------------------------------------------------------------------------
-#---Analyze-----------------------------------------------------------------------------------------------
+#---Main--------------------------------------------------------------------------------------------------
 #---------------------------------------------------------------------------------------------------------
 
-    # Call all analyze methods                        
-    def analyze(self):
+if __name__ == "__main__":
 
-        # If class instance doesn't contains actual vacancies
-        if self.__initial: self._retrievement_confirmator()
-        ##if self.__initial: self.vacancies_retriever()
+    v = VacancyHandler('Системный администратор')
 
-        self._duplicate_vacancies_remover()
-        self._skills_collector()
-        self._experience_collector()
-        self._prof_areas_collector()
-        self._creation_dates_collector()
-        self._vacancy_names_collector()
-        self._regions_collector()
-        self._keywords_extractor()
-        self._description_elements_extractor()
-        self._description_sections_extractor()
-        self._wordbags_extractor()
-        self._unique_counter()
-        self._group_by_salary()
-        self._average_salary()
-        self._median_salary()
-        self._modal_salary()
-        self._employers_collector()
+    pickled_vacancies = ("Y:/YandexDisk/Учёба/Git/Repos/Studies_/"
+                         "Old_Studies_/vacancies/20.03.19 (Сам)/"
+                         "Системный администратор.pickle")
+
+    v.unpickle_vacancies(pickled_vacancies)
+    v.analyze()
+    v.store_results_to_xlsx()
