@@ -1,2 +1,2 @@
 # Python
-Complete python applications and scripts
+**Complete python applications and scripts**

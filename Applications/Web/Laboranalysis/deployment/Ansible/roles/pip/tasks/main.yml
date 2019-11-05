@@ -1,0 +1,16 @@
+
+---
+
+- name: Install pip
+  package:
+    name: "{{ pip_package }}"
+    state: present
+    update_cache: true
+  tags: packages
+
+
+- name: Install modules
+  pip:
+    name: "{{ packages }}"
+    executable: "{{ pip_executable }}"
+  tags: modules

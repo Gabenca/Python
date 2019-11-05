@@ -1,0 +1,46 @@
+
+---
+
+- name: Add an mongo apt signing key
+  apt_key:
+    url: https://www.mongodb.org/static/pgp/server-4.2.asc
+    state: present
+  tags: keys
+
+- name: Add mongo repo
+  copy:
+    dest: "/etc/apt/sources.list.d/mongodb-org-4.2.list"
+    content: "deb http://repo.mongodb.org/apt/debian stretch/mongodb-org/4.2 main"
+  tags: repo
+
+- name: Install mongodb
+  apt:
+    name: "mongodb-org"
+    update_cache: true
+    state: "present"
+
+- name: Create mongodb data dir
+  file:
+    path: "{{ mongodb_db_path }}"
+    state: directory
+    mode: 0755
+    owner: mongodb
+    group: mongodb
+
+- name: Create mongodb service file for systemd
+  copy:
+    src: "mongodb.service"
+    dest: "/etc/systemd/system/mongodb.service"
+
+- name: Enable mongodb systemd service
+  service:
+    name: "mongodb"
+    enabled: "yes"
+
+- name: Write mongod.conf file
+  template:
+    src: "mongod.conf.j2"
+    dest: "/etc/mongod.conf"
+    backup: "yes"
+  notify:
+    - Restart mongodb

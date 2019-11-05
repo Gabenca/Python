@@ -1,0 +1,7 @@
+
+---
+
+- name: Restart gunicorn
+  service:
+    name: "{{ gunicorn_app_name }}"
+    state: restarted

@@ -1,0 +1,2 @@
+# Ansible roles for Python laboranalysis web application deployment
+**Put laboranalysis application directory (from RepoRoot/Applications/Web/Laboranalysis) into laboranalysis/files directory of laboranalysis role before start play**

@@ -1,0 +1,9 @@
+
+---
+
+- name: Retry install packages
+  package:
+    name: "{{ packages }}"
+    state: latest
+    update_cache: true
+  tags: provisioning

@@ -1,0 +1,12 @@
+
+# {{ ansible_managed }}
+
+[Unit]
+Description = watchdog timer for laboranalysis application
+
+[Timer]
+OnCalendar = 00/1:00 
+Unit = laboranalysis_watchdog.service 
+
+[Install]
+WantedBy = timers.target

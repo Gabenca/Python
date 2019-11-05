@@ -1,0 +1,16 @@
+
+# {{ ansible_managed }}
+
+[Unit]
+Description = watchdog service for laboranalysis application
+After = syslog.target
+
+[Service]
+Type = simple
+WorkingDirectory = {{ app_path }}/laboranalysis
+ExecStart = /bin/sh -c "python3.7 {{ app_path }}/laboranalysis/watchdog.py"
+StandardOutput = syslog
+StandardError = syslog
+
+[Install]
+WantedBy = multi-user.target

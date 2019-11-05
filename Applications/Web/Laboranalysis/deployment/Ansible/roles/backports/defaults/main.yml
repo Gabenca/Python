@@ -1,0 +1,16 @@
+
+---
+
+packages:
+
+  - python3.7
+  - python3-ipython
+  - python3-pymongo
+  - python3-requests
+  - python3-tqdm
+  - python3-bs4
+  - python3-flask
+  - python3-pandas
+  - python3-xlsxwriter
+  - python3-boto3
+  - python-setuptools

@@ -1,0 +1,43 @@
+
+---
+
+- name: Copy application files to production server
+  copy:
+    src: "laboranalysis"
+    dest: "{{ app_path }}"
+  tags: files
+
+- name: Create directory for xlsx reports
+  file:
+    path: "{{ reports_path }}"
+    state: directory
+    mode: 0755
+    owner: gunicorn
+    group: gunicorn
+  tags: files
+
+- name: Install watchdog timer configuration
+  template:
+    src: watchdog_timer.conf.j2
+    dest: "/etc/systemd/system/laboranalysis_watchdog.timer"
+  when: ansible_service_mgr == "systemd"
+  tags: systemd
+
+- name: Install watchdog service configuration
+  template:
+    src: watchdog_service.conf.j2
+    dest: "/etc/systemd/system/laboranalysis_watchdog.service"
+  when: ansible_service_mgr == "systemd"
+  tags: systemd
+
+- name: Enable watchdog timer
+  service:
+    name: laboranalysis_watchdog.timer
+    enabled: yes
+  tags: systemd
+
+- name: Enable watchdog service
+  service:
+    name: laboranalysis_watchdog.service
+    enabled: yes
+  tags: systemd

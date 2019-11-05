@@ -1,0 +1,16 @@
+
+# {{ ansible_managed }}
+
+systemLog:
+  destination: file
+  logAppend: true
+  path: {{ mongodb_log_path }}
+storage:
+  dbPath: {{ mongodb_db_path }}
+  journal:
+    enabled: true
+net:
+  port: {{ mongodb_port }}
+  bindIp: {{ mongodb_bind_ip }}
+security:
+  authorization: enabled

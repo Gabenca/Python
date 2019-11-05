@@ -1,0 +1,48 @@
+
+---
+
+- name: Install gunicorn
+  pip:
+    name: gunicorn
+    version: "{{ gunicorn_version }}"
+    state: present
+    executable: pip3
+  tags: packages
+
+- name: Create gunicorn user
+  user:
+    name: "{{ gunicorn_user }}"
+    system: yes
+    home: "/var/lib/{{ gunicorn_user }}"
+    shell: /bin/false
+    state: present
+  tags: users
+
+- name: Create config directory
+  file:
+    name: /etc/gunicorn
+    state: directory
+  tags: files
+
+- name: Install gunicorn config
+  template:
+    src: gunicorn.py.j2
+    dest: "/etc/gunicorn/{{ gunicorn_app_name }}.py"
+  notify: Restart gunicorn
+  tags: config
+
+- name: Install systemd service configuration
+  template:
+    src: systemd.conf.j2
+    dest: "/etc/systemd/system/{{ gunicorn_app_name }}.service"
+    mode: 0755
+  notify: Restart gunicorn
+  when: ansible_service_mgr == "systemd"
+  tags: systemd
+
+- name: Enable gunicorn service
+  service:
+    name: "{{ gunicorn_app_name }}.service"
+    enabled: yes
+  tags: systemd
+  

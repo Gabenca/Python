@@ -12,19 +12,13 @@ import statistics
 import collections
 from tqdm import tqdm
 from bs4 import BeautifulSoup
-from filtervocabulary import vocabulary
-from credentials import mongo_credentials
 
-def profile(func):
-    """Decorator for run function profile"""
-    def wrapper(*args, **kwargs):
-        profile_filename = func.__name__ + '.prof'
-        profiler = cProfile.Profile()
-        result = profiler.runcall(func, *args, **kwargs)
-        profiler.dump_stats(profile_filename)
-        return result
-    return wrapper
-
+# Some stuff
+from laboranalysis.filtervocabulary import vocabulary
+# Our MongoDB connection class:
+from laboranalysis.mongocon import MongoConnection
+# Filesystem location in which reports will be stored
+from laboranalysis.credentials import store_path
 
 class VacancyHandler:
     '''
@@ -51,22 +45,18 @@ class VacancyHandler:
     # Base HeadHunter API-url for vacancy retrievement
     api_url = 'https://api.hh.ru/vacancies'
 
-    # Select certain 'hh_vacancies' db in mongo
-    mongo_db = pymongo.MongoClient(mongo_credentials).hh_vacancies
-
     def __init__(self,
-                # Text to be searched in vacancy to establish a match condition.
-                # Occupation name, in main
-                search_criteria,
-                # Place in vacancy in which match condition will be established
-                search_field='name',
-                average_salary=200000,
-                # Region restriction for vacancy search, for example:
-                # Russia(113), Novosibirsk(1202), Moscow(1) region
-                geo_areas=['1202',]):
+        # Text to be searched in vacancy to establish a match condition.
+        # Occupation name, in main
+        search_criteria,
+        # Place in vacancy in which match condition will be established
+        search_field='name',
+        # Region restriction for vacancy search, for example:
+        # Russia(113), Novosibirsk(1202), Moscow(1) region
+        geo_areas=['1202',]):
         
         # Global path to store pickles and results
-        self.store_path = 'D:/store'
+        self.store_path = store_path
 
         # Text to be searched in vacancy to establish a match condition.
         # Occupation name, in main
@@ -133,6 +123,8 @@ class VacancyHandler:
         
         # HH clusters of vacancies
         self.clusters = None
+
+        self.salaries = []
 
         # Average salary
         self.average_salary = 0
@@ -209,8 +201,10 @@ class VacancyHandler:
         brief_vacancies = []
         current_page = 0
         # Vacancies retrievement batch amount limiter (per_page * number)
-        if number is not None: pages_count = int(number)
-        else: pages_count = current_page + 1
+        if number is not None: 
+            pages_count = int(number)
+        else:
+            pages_count = current_page + 1
 
         while current_page < pages_count:
             self.search_parameters['page'] = current_page
@@ -218,7 +212,8 @@ class VacancyHandler:
                                         params = self.search_parameters)
             response = raw_response.json()
             brief_vacancies += response.get('items')
-            if number is None: pages_count = response.get('pages')
+            if number is None:
+                pages_count = response.get('pages')
             current_page += 1
 
         self.clusters = response.get('clusters')
@@ -229,21 +224,11 @@ class VacancyHandler:
 
         # Form a list of full vacancies without request delay
         ##self.vacancies = [requests.get(url).json() for url in tqdm(urls)]
-        
-        # Form a list of full vacancies with request delay
-        print("Requesting . . .\n")
-        
-        for url in tqdm(urls):
+        for url in urls:
             self.vacancies.append(requests.get(url).json())
             time.sleep(int(delay))
-        print("\nComplete!\n\n")
 
         self.search_arguments = response.get('arguments')
-
-        print("\nDo you want to pickle freshly retrieved vacancies ( [y]es, [n]o ) ?")
-        answer = input()
-        if answer.lower() == 'y':
-            self.pickle_vacancies()
 
         # Now the class instance already contains actual vacancies
         self.__initial = False
@@ -325,10 +310,15 @@ class VacancyHandler:
     #-----------------------------------------------------------------------------------------------------
     def store_vacancies_to_mongo(self):
         '''Store vacancies to mongodb'''
-        # Create collection with vacancies occupation name stored in 'search_criteria'
-        collection = VacancyHandler.mongo_db[self.search_criteria]
-        # Stores insert results in variable
-        collection.insert_many(self.vacancies)
+
+        # MongoDB connection object    
+        client = MongoConnection()
+        # Use our connection object with context manager to handle connection
+        with client:
+            # Connection to criteria collection of 'hh_vacancies' database
+            collection = client.connection.hh_vacancies[self.search_criteria]
+            # Put vacancies
+            collection.insert_many(self.vacancies)        
 
 #---------------------------------------------------------------------------------------------------------
 #---Results-----------------------------------------------------------------------------------------------
@@ -339,13 +329,31 @@ class VacancyHandler:
         'search_criteria-vacancies_amount.xlsx'
         located in 'store_path' path'''
 
-        def form_sheet(data, columns, name):
+        def form_sheet(data, columns, name, a_width, b_width):
             sheet = pandas.DataFrame(data, columns=columns)
             sheet.to_excel(writer, name, index=False)
+            worksheet = writer.sheets[name]
+            worksheet.set_column('A:A', a_width)
+            worksheet.set_column('B:B', b_width)
+            worksheet.conditional_format('A2:A11', {'type': '3_color_scale'})
+
+        def form_chart(data, name, amount, type, code):
+            workbook = writer.book
+            worksheet = writer.sheets[name]
+            chart = workbook.add_chart({'type': type})
+            chart.add_series({
+                'categories': f"='{name}'!$A$2:$A${amount}",
+                'values':     f"='{name}'!$B$2:$B${amount}",
+            })
+            if type != 'pie':
+                chart.set_x_axis({'name': data[0], 'num_font':  {'rotation': 45}})
+                chart.set_y_axis({'name': data[1], 'major_gridlines': {'visible': False}})
+                chart.set_legend({'position': 'none'})
+            worksheet.insert_chart(code, chart)
 
         table_structure = {
             'Должности': ['Название должности', 'Количество вакансий'],
-            'Ключевые навыки': ['Ключевые навыки (тэги)', 'Вакансий'],
+            'Ключевые навыки': ['Ключевые навыки', 'Вакансий'],
             'Опыт': ['Требуемый опыт', 'Вакансий'],        
             'Технологии': ['Продукты|Технологии', 'Вакансий'],        
             'Работодатели': ['Работодатель', 'Ссылка'],
@@ -353,49 +361,103 @@ class VacancyHandler:
             'Профобласти': ['Профобласть', 'Вакансий'],
             'Специализации': ['Специализация', 'Вакансий'],
             'Группы': ['Диапазон', 'Вакансий'],
-            'Зарплата': ['Средняя зарплата', 'Медианная зарплата', 'Модальная зарплата'],
+            'Зарплата': ['Зарплата', 'Рублей'],
         }
         
         path = f'{self.store_path}/{self.search_criteria}-{len(self.vacancies)}.xlsx'
         
         with pandas.ExcelWriter(path) as writer:
 
-            form_sheet(self.vacancy_names, table_structure['Должности'], 'Должности')
-            form_sheet(self.skills_all, table_structure['Ключевые навыки'],'Ключевые навыки')
-            form_sheet(self.keywords_all, table_structure['Технологии'], 'Технологии')
-            form_sheet(self.regions, table_structure['Регионы'], 'Регионы')
-            form_sheet(self.experience, table_structure['Опыт'], 'Опыт')
-            form_sheet(self.employers_brief.items(), table_structure['Работодатели'], 'Работодатели')
-            form_sheet(self.profareas, table_structure['Профобласти'], 'Профобласти')
-            form_sheet(self.profareas_granular, table_structure['Специализации'], 'Специализации')
-            form_sheet(self.salary_groups.items(), table_structure['Группы'], 'Зарплатные группы')
-            form_sheet([(self.average_salary, self.median_salary, self.modal_salary),],
-                    table_structure['Зарплата'], 'Зарплата')
+            try:
+                form_sheet(self.vacancy_names, table_structure['Должности'], 'Должности', 60, 25)
+                form_chart(table_structure['Должности'], 'Должности', '11',  'column', 'D2')
+            except:
+                pass
+
+            try:
+                form_sheet(self.skills_all, table_structure['Ключевые навыки'],'Ключевые навыки', 50, 20)
+                form_chart(table_structure['Ключевые навыки'], 'Ключевые навыки', '11', 'column', 'D2')
+            except:
+                form_sheet(['Не найдено'], ['Не найдено'], 'Ключевые навыки', 35, 15)
+
+            try:
+                form_sheet(self.keywords_all, table_structure['Технологии'], 'Технологии', 30, 20)
+                form_chart(table_structure['Технологии'], 'Технологии', '11', 'column', 'D2')
+            except:
+                form_sheet(['Не найдено'], ['Не найдено'], 'Технологии', 35, 15)
+        
+            try:
+                form_sheet(self.regions, table_structure['Регионы'], 'Регионы', 35, 20)
+                form_chart(table_structure['Регионы'], 'Регионы', '11', 'column', 'D2')
+            except:
+                pass
+
+            try:
+                form_sheet(self.experience, table_structure['Опыт'], 'Опыт', 30, 20)
+                form_chart(table_structure['Опыт'], 'Опыт', '5', 'pie', 'C3')
+            except:
+                pass
+        
+            try:            
+                form_sheet(self.employers_brief.items(), table_structure['Работодатели'], 'Работодатели', 50, 35)
+            except:
+                form_sheet(['Не найдено'], ['Не найдено'], 'Работодатели', 35, 15)
+            
+            try:
+                form_sheet(self.profareas, table_structure['Профобласти'], 'Профобласти', 55, 20)
+                form_chart(table_structure['Профобласти'], 'Профобласти', '11', 'column', 'D2')
+            except:
+                pass
+    
+            try:
+                form_sheet(self.profareas_granular, table_structure['Специализации'], 'Специализации', 45, 20)
+                form_chart(table_structure['Специализации'], 'Специализации', '11', 'column', 'D2')
+            except:
+                pass
+            
+            try:
+                form_sheet(self.salary_groups.items(), table_structure['Группы'], 'Зарплатные группы', 25, 20)
+                form_chart(table_structure['Группы'], 'Зарплатные группы', '11', 'column', 'D2')
+            except:
+                form_sheet(['Не найдено'], ['Не найдено'], 'Зарплатные группы', 35, 15)
+
+            try:
+                form_sheet(self.salaries, table_structure['Зарплата'], 'Зарплата', 25, 20)
+            except:
+                form_sheet(['Не найдено'], ['Не найдено'], 'Зарплата', 35, 15)
 
             for criteria in vocabulary['Знания']:
-                form_sheet(set(self._by_word_extractor(criteria)),
-                        [criteria.capitalize()],
-                        criteria.capitalize())
+                try:
+                    form_sheet(set(self._by_word_extractor(criteria)),
+                            [criteria.capitalize()],
+                            criteria.capitalize(), 100, 30)
+                except:
+                    pass
 
             for criteria in self.description_elements_top:
-                form_sheet(set(self.description_elements_top.get(criteria)),
-                        [criteria.capitalize()],
-                        criteria.capitalize())
-            
-            form_sheet(self.wordbags_all, ['Слово', 'Вхождений'], 'Мешок слов')
+                try:
+                    form_sheet(set(self.description_elements_top.get(criteria)),
+                            [criteria.capitalize()],
+                            criteria.capitalize(), 100, 30)
+                except:
+                    pass
+
+            try:
+                form_sheet(self.wordbags_all, ['Слово', 'Вхождений'], 'Мешок слов', 25, 20)
+            except:
+                pass
 
 #---------------------------------------------------------------------------------------------------------
 #---Analyze-----------------------------------------------------------------------------------------------
 #---------------------------------------------------------------------------------------------------------
 
-    ##@profile
     # Call all analyze methods                        
     def analyze(self):
 
         # If class instance doesn't contains actual vacancies
-        if self.__initial: self._retrievement_confirmator()
-        ##if self.__initial: self.vacancies_retriever()
-
+        if self.__initial:
+            self._vacancies_retriever(delay=10, number=None)
+            ##self._retrievement_confirmator()
         self._duplicate_vacancies_remover()
         self._skills_collector()
         self._experience_collector()
@@ -430,11 +492,6 @@ class VacancyHandler:
         # Forms {key_skill : number of entries}
         key_skills_counted = {skill : mixed_key_skills.count(skill)
             for skill in mixed_key_skills}
-
-        # Forms {key_skill : number of entries}
-        ##key_skills_counted = {}
-        ##for skill in mixed_key_skills:
-        ##    key_skills_counted[skill] = key_skills_counted.get(skill, 0) + 1
 
         # Sort by number of entries
         self.skills_all = sorted(key_skills_counted.items(),
@@ -478,16 +535,6 @@ class VacancyHandler:
     # Collect specialization areas from vacancies
     #-----------------------------------------------------------------------------------------------------
     def _prof_areas_collector(self):
-
-        ##raw_area_ids = [categories.get('id')
-        ##   for raw_specialization in raw_specializations
-        ##      for categories in raw_specialization]
-        ##raw_areas = {categories.get('profarea_name') : categories.get('name')
-        ##    for raw_specialization in raw_specializations
-        ##        for categories in raw_specialization}
-        ##Forms {experience : number of entries}
-        ##areas = {id : raw_area_ids.count(id)
-        ##    for id in raw_area_ids}
 
         raw_specializations = [full_vacancy.get('specializations')
             for full_vacancy in self.vacancies]
@@ -826,6 +873,11 @@ class VacancyHandler:
             if salary == max(self.salary_groups.values()):
                 self.modal_salary = group
 
+        self.salaries = [('Средняя', self.average_salary),
+                         ('Медиана', self.median_salary),
+                         ('Модальная', self.modal_salary)
+            ]
+
 #---------------------------------------------------------------------------------------------------------
 #---Misc--------------------------------------------------------------------------------------------------
 #---------------------------------------------------------------------------------------------------------
@@ -855,11 +907,7 @@ class VacancyHandler:
 if __name__ == "__main__":
 
     v = VacancyHandler('Системный администратор')
-
-    pickled_vacancies = ("Y:/YandexDisk/Учёба/Git/Repos/Studies_/"
-                         "Old_Studies_/vacancies/20.03.19 (Сам)/"
-                         "Системный администратор.pickle")
-
+    pickled_vacancies = (f"{store_path}/SA.pickle")
     v.unpickle_vacancies(pickled_vacancies)
     v.analyze()
     v.store_results_to_xlsx()
