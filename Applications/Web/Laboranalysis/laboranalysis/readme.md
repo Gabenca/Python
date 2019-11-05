@@ -1,2 +1,2 @@
-# Python laboranalysis web application files itself
-**This directory contains laboranalysis web application files (which are the application as such).**
+# Python laboranalysis web application
+**This directory contains laboranalysis web application files itself (which are the application as such).**

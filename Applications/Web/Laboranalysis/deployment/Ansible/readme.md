@@ -1,5 +1,5 @@
-# Ansible CM playbooks and roles for Python laboranalysis web application deployment
-**This directory contains playbooks and roles for laboranalysis Python application deployment.**
+# Ansible stuff
+**This directory contains Ansible CM playbooks and roles for laboranalysis Python application deployment.**
 
 ## Directory structure
 The root of the directory contains two directories: 
