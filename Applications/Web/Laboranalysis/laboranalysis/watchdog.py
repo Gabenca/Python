@@ -1,17 +1,22 @@
 
 #!/usr/bin/python3.7
 
-# Our MongoDB connection class:
-from laboranalysis.mongocon import MongoConnection
+# MongoDB connection:
+from pymongo import MongoClient
+# Our send mail class:
+from mailsender import MailSender
+# Our credentials:
+from credentials import mongo, mail_creds
+
+problem = 'Laboranalysis application ran into an issue'
+success = 'Ваш отчёт готов!'
 
 # This function tries to get an orders from MongoDB
 def get_orders_from_mongo():
-    # MongoDB connection object    
-    client = MongoConnection()
-    # Use our connection object with context manager to handle connection
-    with client:
+    # Instantiate MongoDB connection context
+    with MongoClient(mongo) as mongodb:
         # Connection to 'orders' collection of 'hh_reports' database
-        collection = client.connection.hh_reports['orders']
+        collection = mongodb.hh_reports['orders']
         # Search for orders
         orders = [order for order in (collection.find({}))]
         if orders:
@@ -27,40 +32,55 @@ def get_orders_from_mongo():
 def start_request(order):
     try:
         from laboranalysis.vacancyhandler import VacancyHandler
-        v = VacancyHandler(order.get('occupation'))
-        v.analyze()
-        v.store_vacancies_to_mongo()
-        v.store_results_to_xlsx()
+        vacancies = VacancyHandler(order.get('occupation'))
+        vacancies.analyze()
+        vacancies.store_vacancies_to_mongo()
+        vacancies.store_results_to_xlsx()
         change_order_status(order)
     except:
-        pass
+        mail = MailSender( [mail_creds['admin']], 
+                            problem,
+                            str(order) )
+        mail.send_email()
+
+    order_customer = order.get('customer')
+    mail = MailSender( [mail_creds['admin'], order_customer],
+                        success, 
+                        order.get('occupation') )
+    mail.send_email()
 
 # This function makes resume retrievement and analyze process
 def start_parse(order):
     try:
         from laboranalysis.resumehandler import ResumeHandler
-        r = ResumeHandler(order.get('criteria'))
-        r.analyze()
-        r.store_resumes_to_mongo()
-        r.store_results_to_xlsx()
+        resumes = ResumeHandler(order.get('criteria'))
+        resumes.analyze()
+        resumes.store_resumes_to_mongo()
+        resumes.store_results_to_xlsx()
         change_order_status(order)
     except:
-        pass
+        mail = MailSender( [mail_creds['admin']], 
+                            problem, 
+                            str(order) )
+        mail.send_email()        
 
-# This function moves order document from 'orders' collection to 'complete' collection
+    order_customer = order.get('customer')
+    mail = MailSender( [mail_creds['admin'], order_customer],
+                        success, 
+                        order.get('criteria') )
+    mail.send_email()
+
+# This function moves order document 
+# from 'orders' collection to 'complete' collection
 def change_order_status(order):
-    # MongoDB connection object    
-    client = MongoConnection()
-    # Use our connection object with context manager to handle connection
-    with client:
+    # Instantiate MongoDB connection context
+    with MongoClient(mongo) as mongodb:
         # Connection to 'complete' collection of 'hh_reports' database
-        collection = client.connection.hh_reports['complete']
+        collection = mongodb.hh_reports['complete']
         # Put completed order
         collection.insert_one(order)
-    # Use our connection object with context manager to handle connection
-    with client:
         # Connection to 'orders' collection of 'hh_reports' database
-        collection = client.connection.hh_reports['orders']
+        collection = mongodb.hh_reports['orders']
         # Drop completed order
         collection.delete_one(order)
 

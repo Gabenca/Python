@@ -1,24 +1,56 @@
 
+###############################################################################
+##########################   Ethical disclaimer   #############################
+###############################################################################
+
+# In this application, we work with the portal and API of the headhunter.ru company.
+# We are very grateful to headhunter.ru company for the beautiful portal 
+# and excellently-designed well-documented API, programming with which was a pure pleasure.
+# We are aware of the complexity of the development and maintenance of such services 
+# and such a business as a whole. We are also fully aware that specialized databases 
+# are one of the main assets of the company.
+#
+# In connection with the foregoing, we should in no case forget that:
+#
+#      THIS APPLICATION WAS CREATED EXCLUSIVELY FOR EDUCATIONAL PURPOSES
+#      AND COMPLETELY EXCLUDES THE POSSIBILITY OF ANY BUSINESS USE.
+#
+# Also remember that the company itself provides analytical reporting services 
+# that you can always use and this will be the best choice.
+
+###############################################################################
+
+#---Imports--------------------------------------------------------------------
+#------------------------------------------------------------------------------
+
 import os
 import re
 import json
 import time
 import pandas
 import pickle
-import pymongo
 import cProfile
 import requests
 import statistics
 import collections
-from tqdm import tqdm
+
+# HTML parser
 from bs4 import BeautifulSoup
+# MongoDB connection:
+from pymongo import MongoClient
+# Preetty progressbar
+from tqdm import tqdm
 
 # Some stuff
 from laboranalysis.filtervocabulary import vocabulary
-# Our MongoDB connection class:
-from laboranalysis.mongocon import MongoConnection
 # Filesystem location in which reports will be stored
 from laboranalysis.credentials import store_path
+# MongoDB credentials:
+from credentials import mongo
+
+
+#---Class----------------------------------------------------------------------
+#------------------------------------------------------------------------------
 
 class VacancyHandler:
     '''
@@ -38,9 +70,9 @@ class VacancyHandler:
     ----------------------------------------------------        
     '''
 
-#---------------------------------------------------------------------------------------------------------
-#---Initializations---------------------------------------------------------------------------------------
-#---------------------------------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
+#---Initializations------------------------------------------------------------
+#------------------------------------------------------------------------------
 
     # Base HeadHunter API-url for vacancy retrievement
     api_url = 'https://api.hh.ru/vacancies'
@@ -190,12 +222,12 @@ class VacancyHandler:
         return (f"Totally {self.__len__()} vacancies on "
         f"'{self.search_parameters.get('text', 'undefined')}' occupation")
 
-#---------------------------------------------------------------------------------------------------------
-#---Retrievers--------------------------------------------------------------------------------------------
-#---------------------------------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
+#---Retrievers-----------------------------------------------------------------
+#------------------------------------------------------------------------------
 
     # Retrieve vacancies from HH
-    #-----------------------------------------------------------------------------------------------------
+    #--------------------------------------------------------------------------
     def _vacancies_retriever(self, delay, number):
 
         brief_vacancies = []
@@ -236,7 +268,7 @@ class VacancyHandler:
     # Announces general information on the response to the request
     # Asks for confirmation for the full retrievement
     # Start full retrievement, if confirmed
-    #----------------------------------------------------------------------------------------------------
+    #--------------------------------------------------------------------------
     def _retrievement_confirmator(self):
 
         raw_response = requests.get(VacancyHandler.api_url,
@@ -269,9 +301,9 @@ class VacancyHandler:
             print(f"\n\n")
             self._vacancies_retriever(delay, number)
 
-#---------------------------------------------------------------------------------------------------------
-#---Filters-----------------------------------------------------------------------------------------------
-#---------------------------------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
+#---Filters--------------------------------------------------------------------
+#------------------------------------------------------------------------------
 
     def exclude_by_region(self, exclude):
         '''Exclude vacancies by 'exclude' criteria from all vacancies batch'''
@@ -279,16 +311,16 @@ class VacancyHandler:
             for vacancy in self.vacancies
                 if vacancy.get('area').get('name') != exclude]
 
-    #-----------------------------------------------------------------------------------------------------
+    #--------------------------------------------------------------------------
     def include_by_region(self, include):
         '''Include vacancies by 'include' criteria from all vacancies batch'''
         self.vacancies = [vacancy
             for vacancy in self.vacancies
                 if vacancy.get('area').get('name') == include]
 
-#---------------------------------------------------------------------------------------------------------
-#---Store-------------------------------------------------------------------------------------------------
-#---------------------------------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
+#---Store----------------------------------------------------------------------
+#------------------------------------------------------------------------------
 
     def pickle_vacancies(self, path=None):
         '''Store object 'vacancies' into file located in "path"'''
@@ -299,7 +331,7 @@ class VacancyHandler:
         with open(file_path, 'wb') as file:
             pickle.dump(self.vacancies, file)
 
-    #-----------------------------------------------------------------------------------------------------
+    #--------------------------------------------------------------------------
     def unpickle_vacancies(self, path):
         '''Restore object 'vacancies' from file located in "path"'''
         with open(path, 'rb') as file:
@@ -307,22 +339,19 @@ class VacancyHandler:
         # Now the class instance already contains actual vacancies
         self.__initial = False
 
-    #-----------------------------------------------------------------------------------------------------
+    #--------------------------------------------------------------------------
     def store_vacancies_to_mongo(self):
         '''Store vacancies to mongodb'''
-
-        # MongoDB connection object    
-        client = MongoConnection()
-        # Use our connection object with context manager to handle connection
-        with client:
+        # Instantiate MongoDB connection context
+        with MongoClient(mongo) as mongodb:
             # Connection to criteria collection of 'hh_vacancies' database
-            collection = client.connection.hh_vacancies[self.search_criteria]
+            collection = mongodb.hh_vacancies[self.search_criteria]
             # Put vacancies
             collection.insert_many(self.vacancies)        
 
-#---------------------------------------------------------------------------------------------------------
-#---Results-----------------------------------------------------------------------------------------------
-#---------------------------------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
+#---Results--------------------------------------------------------------------
+#------------------------------------------------------------------------------
 
     def store_results_to_xlsx(self):
         '''Store analysis result into xlsx file
@@ -364,67 +393,107 @@ class VacancyHandler:
             'Зарплата': ['Зарплата', 'Рублей'],
         }
         
-        path = f'{self.store_path}/{self.search_criteria}-{len(self.vacancies)}.xlsx'
+        path = ( f'{self.store_path}/'
+                 f'{self.search_criteria}-'
+                 f'{len(self.vacancies)}.xlsx' )
         
         with pandas.ExcelWriter(path) as writer:
 
             try:
-                form_sheet(self.vacancy_names, table_structure['Должности'], 'Должности', 60, 25)
-                form_chart(table_structure['Должности'], 'Должности', '11',  'column', 'D2')
+                form_sheet( self.vacancy_names, 
+                            table_structure['Должности'],
+                            'Должности', 60, 25 )
+                form_chart( table_structure['Должности'],
+                            'Должности', '11', 'column', 'D2' )
             except:
                 pass
 
             try:
-                form_sheet(self.skills_all, table_structure['Ключевые навыки'],'Ключевые навыки', 50, 20)
-                form_chart(table_structure['Ключевые навыки'], 'Ключевые навыки', '11', 'column', 'D2')
+                form_sheet( self.skills_all, 
+                            table_structure['Ключевые навыки'],
+                            'Ключевые навыки', 50, 20 )
+                form_chart( table_structure['Ключевые навыки'], 
+                            'Ключевые навыки', '11', 'column', 'D2' )
             except:
-                form_sheet(['Не найдено'], ['Не найдено'], 'Ключевые навыки', 35, 15)
+                form_sheet( ['Не найдено'], 
+                            ['Не найдено'], 
+                            'Ключевые навыки', 35, 15 )
 
             try:
-                form_sheet(self.keywords_all, table_structure['Технологии'], 'Технологии', 30, 20)
-                form_chart(table_structure['Технологии'], 'Технологии', '11', 'column', 'D2')
+                form_sheet( self.keywords_all, 
+                            table_structure['Технологии'], 
+                            'Технологии', 30, 20 )
+                form_chart( table_structure['Технологии'], 
+                            'Технологии', '11', 'column', 'D2' )
             except:
-                form_sheet(['Не найдено'], ['Не найдено'], 'Технологии', 35, 15)
+                form_sheet( ['Не найдено'], 
+                            ['Не найдено'], 
+                            'Технологии', 35, 15 )
         
             try:
-                form_sheet(self.regions, table_structure['Регионы'], 'Регионы', 35, 20)
-                form_chart(table_structure['Регионы'], 'Регионы', '11', 'column', 'D2')
+                form_sheet( self.regions, 
+                            table_structure['Регионы'], 
+                            'Регионы', 35, 20 )
+                form_chart( table_structure['Регионы'], 
+                            'Регионы', '11', 'column', 'D2')
             except:
                 pass
 
             try:
-                form_sheet(self.experience, table_structure['Опыт'], 'Опыт', 30, 20)
-                form_chart(table_structure['Опыт'], 'Опыт', '5', 'pie', 'C3')
+                form_sheet( self.experience, 
+                            table_structure['Опыт'], 
+                            'Опыт', 30, 20 )
+                form_chart( table_structure['Опыт'], 
+                            'Опыт', '5', 'pie', 'C3' )
             except:
                 pass
         
             try:            
-                form_sheet(self.employers_brief.items(), table_structure['Работодатели'], 'Работодатели', 50, 35)
+                form_sheet( self.employers_brief.items(), 
+                            table_structure['Работодатели'], 
+                            'Работодатели', 50, 35 )
             except:
-                form_sheet(['Не найдено'], ['Не найдено'], 'Работодатели', 35, 15)
+                form_sheet( ['Не найдено'], 
+                            ['Не найдено'], 
+                            'Работодатели', 35, 15)
             
             try:
-                form_sheet(self.profareas, table_structure['Профобласти'], 'Профобласти', 55, 20)
-                form_chart(table_structure['Профобласти'], 'Профобласти', '11', 'column', 'D2')
+                form_sheet( self.profareas, 
+                            table_structure['Профобласти'], 
+                            'Профобласти', 55, 20 )
+                form_chart( table_structure['Профобласти'], 
+                            'Профобласти', '11', 'column', 'D2' )
             except:
                 pass
     
             try:
-                form_sheet(self.profareas_granular, table_structure['Специализации'], 'Специализации', 45, 20)
-                form_chart(table_structure['Специализации'], 'Специализации', '11', 'column', 'D2')
+                form_sheet( self.profareas_granular, 
+                            table_structure['Специализации'], 
+                            'Специализации', 45, 20 )
+                form_chart( table_structure['Специализации'], 
+                            'Специализации', '11', 'column', 'D2' )
             except:
                 pass
             
             try:
-                form_sheet(self.salary_groups.items(), table_structure['Группы'], 'Зарплатные группы', 25, 20)
-                form_chart(table_structure['Группы'], 'Зарплатные группы', '11', 'column', 'D2')
+                form_sheet( self.salary_groups.items(), 
+                            table_structure['Группы'], 
+                            'Зарплатные группы', 25, 20 )
+                form_chart( table_structure['Группы'], 
+                            'Зарплатные группы', '11', 'column', 'D2' )
             except:
-                form_sheet(['Не найдено'], ['Не найдено'], 'Зарплатные группы', 35, 15)
+                form_sheet( ['Не найдено'], 
+                            ['Не найдено'], 
+                            'Зарплатные группы', 35, 15 )
 
             try:
-                form_sheet(self.salaries, table_structure['Зарплата'], 'Зарплата', 25, 20)
+                form_sheet( self.salaries, 
+                            table_structure['Зарплата'], 
+                            'Зарплата', 25, 20 )
             except:
-                form_sheet(['Не найдено'], ['Не найдено'], 'Зарплата', 35, 15)
+                form_sheet( ['Не найдено'], 
+                            ['Не найдено'], 
+                            'Зарплата', 35, 15 )
 
             for criteria in vocabulary['Знания']:
                 try:
@@ -443,13 +512,15 @@ class VacancyHandler:
                     pass
 
             try:
-                form_sheet(self.wordbags_all, ['Слово', 'Вхождений'], 'Мешок слов', 25, 20)
+                form_sheet( self.wordbags_all, 
+                            ['Слово', 'Вхождений'], 
+                            'Мешок слов', 25, 20 )
             except:
                 pass
 
-#---------------------------------------------------------------------------------------------------------
-#---Analyze-----------------------------------------------------------------------------------------------
-#---------------------------------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
+#---Analyze--------------------------------------------------------------------
+#------------------------------------------------------------------------------
 
     # Call all analyze methods                        
     def analyze(self):
@@ -473,12 +544,12 @@ class VacancyHandler:
         self._salary_calculator()
         self._employers_collector()
 
-#---------------------------------------------------------------------------------------------------------
-#---Collectors--------------------------------------------------------------------------------------------
-#---------------------------------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
+#---Collectors-----------------------------------------------------------------
+#------------------------------------------------------------------------------
 
     # Collect key skills
-    #-----------------------------------------------------------------------------------------------------
+    #--------------------------------------------------------------------------
     def _skills_collector(self):
 
         raw_key_skills = [vacancy.get('key_skills')
@@ -501,7 +572,7 @@ class VacancyHandler:
         self.skills = self.skills_all[0:100]
 
     # Collect required work experience from vacancies
-    #-----------------------------------------------------------------------------------------------------
+    #--------------------------------------------------------------------------
     def _experience_collector(self):
 
         raw_experience = [full_vacancy.get('experience').get('name')
@@ -517,7 +588,7 @@ class VacancyHandler:
                                  reverse=True)
 
     # Collect vacancy names
-    #-----------------------------------------------------------------------------------------------------
+    #--------------------------------------------------------------------------
     def _vacancy_names_collector(self):
 
         vacancy_names = [vacancy.get('name').lower()
@@ -533,7 +604,7 @@ class VacancyHandler:
                                     reverse=True)
 
     # Collect specialization areas from vacancies
-    #-----------------------------------------------------------------------------------------------------
+    #--------------------------------------------------------------------------
     def _prof_areas_collector(self):
 
         raw_specializations = [full_vacancy.get('specializations')
@@ -568,7 +639,7 @@ class VacancyHandler:
                                          reverse=True)
     
     # Collect creation dates from vacancies
-    #-----------------------------------------------------------------------------------------------------
+    #--------------------------------------------------------------------------
     def _creation_dates_collector(self):
 
         raw_create_dates = [vacancy.get('created_at')
@@ -579,7 +650,7 @@ class VacancyHandler:
             for date in raw_create_dates})
     
     # Collect employers
-    #-----------------------------------------------------------------------------------------------------
+    #--------------------------------------------------------------------------
     def _employers_collector(self):
 
         self.employers_full = [vacancy.get('employer')
@@ -590,7 +661,7 @@ class VacancyHandler:
             for vacancy in self.vacancies}
 
     # Collect regions
-    #-----------------------------------------------------------------------------------------------------
+    #--------------------------------------------------------------------------
     def _regions_collector(self):
 
         regions = [vacancy.get('area').get('name')
@@ -605,13 +676,13 @@ class VacancyHandler:
                                     key=lambda x: x[1],
                                     reverse=True)
 
-#---------------------------------------------------------------------------------------------------------
-#---Extractors--------------------------------------------------------------------------------------------
-#---------------------------------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
+#---Extractors-----------------------------------------------------------------
+#------------------------------------------------------------------------------
 
     # Wordbags formed from self.description_sections_top, which in turn is
     # Top of 'strong's' dictionary formed from lots of batches of different vacancies
-    #-----------------------------------------------------------------------------------------------------
+    #--------------------------------------------------------------------------
     def _wordbags_extractor(self):
 
         def extract_by_criteria(criteria):
@@ -646,7 +717,7 @@ class VacancyHandler:
                                    reverse=True)
 
     # Extract all english words from vacancy desriptions
-    #-----------------------------------------------------------------------------------------------------
+    #--------------------------------------------------------------------------
     def _keywords_extractor(self):
 
         # Texts list from vacancy descriptions
@@ -677,7 +748,7 @@ class VacancyHandler:
         self.keywords = self.keywords_all[0:100]
 
     # Extract child elements from all subject headings (html 'strongs')
-    #-----------------------------------------------------------------------------------------------------
+    #--------------------------------------------------------------------------
     def _description_elements_extractor(self):
 
         # bs4.BeautifulSoup objects list formed from vacancy descriptions
@@ -695,7 +766,7 @@ class VacancyHandler:
         self.description_elements_all = list(set(p_tags + li_tags))
     
     # Extract multiple different things from vacancy description bodies
-    #-----------------------------------------------------------------------------------------------------
+    #--------------------------------------------------------------------------
     def _description_sections_extractor(self):
 
         # bs4.BeautifulSoup objects list formed from vacancy descriptions
@@ -763,8 +834,9 @@ class VacancyHandler:
                         except AttributeError:
                             pass
        
-    # Get python list of list 'description_sections_top' filtered by custom 'filter_vocabulary' key
-    #-----------------------------------------------------------------------------------------------------
+    # Get python list of list 'description_sections_top'
+    # filtered by custom 'filter_vocabulary' key
+    #--------------------------------------------------------------------------
 
     # Dirty, but fast version
     ##def _by_word_extractor(self, criteria):
@@ -789,12 +861,13 @@ class VacancyHandler:
         
         return sorted(result, key=len)
 
-#---------------------------------------------------------------------------------------------------------
-#---Calculators-------------------------------------------------------------------------------------------
-#---------------------------------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
+#---Calculators----------------------------------------------------------------
+#------------------------------------------------------------------------------
 
-    # Calculate average, median, modal salaries and group salaries into number of clusters
-    #-----------------------------------------------------------------------------------------------------
+    # Calculate average, median, modal salaries
+    # and group salaries into number of clusters
+    #--------------------------------------------------------------------------
     def _salary_calculator(self):
         
         def _get_salary_group(salary):
@@ -878,12 +951,12 @@ class VacancyHandler:
                          ('Модальная', self.modal_salary)
             ]
 
-#---------------------------------------------------------------------------------------------------------
-#---Misc--------------------------------------------------------------------------------------------------
-#---------------------------------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
+#---Misc-----------------------------------------------------------------------
+#------------------------------------------------------------------------------
 
     # Remove dubplicates in vacancies list
-    #-----------------------------------------------------------------------------------------------------
+    #--------------------------------------------------------------------------
     def _duplicate_vacancies_remover(self):
 
         unique_vacancies = []
@@ -895,19 +968,19 @@ class VacancyHandler:
         self.vacancies = unique_vacancies
 
     # Count unique vacancies in vacancies list
-    #-----------------------------------------------------------------------------------------------------
+    #--------------------------------------------------------------------------
     def _unique_counter(self):
         self.unique = len({vacancy.get('id')
             for vacancy in self.vacancies})
 
-#---------------------------------------------------------------------------------------------------------
-#---Main--------------------------------------------------------------------------------------------------
-#---------------------------------------------------------------------------------------------------------
+
+#---Main-----------------------------------------------------------------------
+#------------------------------------------------------------------------------
 
 if __name__ == "__main__":
 
-    v = VacancyHandler('Системный администратор')
+    vacancies = VacancyHandler('Системный администратор')
     pickled_vacancies = (f"{store_path}/SA.pickle")
-    v.unpickle_vacancies(pickled_vacancies)
-    v.analyze()
-    v.store_results_to_xlsx()
+    vacancies.unpickle_vacancies(pickled_vacancies)
+    vacancies.analyze()
+    vacancies.store_results_to_xlsx()
