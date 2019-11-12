@@ -1,14 +1,18 @@
+
 #!/usr/bin/python3.7
 
+###############################################################################
 # This application handle web forms, that offers list of analysis reports,
 # vacancies analysis report request and resume analysis report request.
-# Under the hood, it requests AWS S3 Object Storage for xslx report files,
-# and returns all hyperlinks to it, which was find.
-# This is SERVER version, intended for deploying to OS environment!
+# Under the hood, it lists local directory content with xslx report files,
+# and generates hyperlinks to it.
+###############################################################################
+####   This is SERVER version, intended for deploying to OS environment!   ####
+###############################################################################
 
 # Import required modules
 # Flask python web framework itself:
-from flask import Flask, render_template, flash, request, Markup
+from flask import Flask, render_template, flash, request, Markup, send_from_directory
 # Html form handlers:
 from wtforms import Form, TextField, TextAreaField, validators, StringField, SubmitField
 # Some stuff to serialize objects:
@@ -17,10 +21,12 @@ from json import dumps
 from pymongo import MongoClient
 # Our beloved requests :) :
 import requests
+# Directory walking stuff for xlsx reports listing:
+import os
 # Our send mail class:
 from mailsender import MailSender
 # And finally, our credentials:
-from credentials import SECRET_KEY, mongo, mail_creds
+from credentials import SECRET_KEY, mongo, mail_creds, store_path
 
 # Initialize Flask web application instance itself
 app = Flask(__name__)
@@ -29,6 +35,8 @@ app.config.from_object(__name__)
 # Just little thing which provided for security reasons
 # It's Flask strict requirement
 app.config['SECRET_KEY'] = SECRET_KEY
+# Directory with our reports
+app.config['REPORTS_DIRECTORY'] = store_path
 
 # Define vacancy order html form
 class VacancyOrderForm(Form):
@@ -51,23 +59,6 @@ message = ( 'Ваш запрос был успешно добавлен в оч�
 thanks = 'Спасибо за пользование сервисом!'
 # Form validation error message on order
 error = 'Пожалуйста, заполните все имеющиеся поля формы.'
-
-# This function tries to get a hyperlinks to the xlsx report files from MongoDB
-def get_hrefs_from_mongo(report_type):
-    # Instantiate MongoDB connection context
-    with MongoClient(mongo) as mongodb:
-        # Connection to 'xlsx' collection of 'hh_reports' database
-        collection = mongodb.hh_reports['xlsx']
-        # Attempt to find all reports
-        raw_reports = collection.find({})
-        reports = [report for report in raw_reports]
-        # Separate reports by its types
-        response = {item[report_type]:item['report']
-            for item in reports
-                if report_type in item.keys()}
-        if response:
-            # Return hyperlinks
-            return response
 
 # This function adds a request or parse order to MongoDB.
 def add_order_to_mongo(email, occupation=None, criteria=None):
@@ -101,18 +92,33 @@ def add_order_to_mongo(email, occupation=None, criteria=None):
                                 str(order) )
             mail.send_email()
 
+# This function forms list of xlsx report files from 'store_path' dir.
+def get_reports_list(report_type):
+    path = os.path.join(store_path, report_type)
+    reports = [report.split('.')[0] 
+        for report in os.listdir(path) 
+            if os.path.isfile(os.path.join(path, report))]
+    return reports
+
+# URL binding
+@app.route('/reports/<path:filename>')
+# Function which exposing xlsx reports to main page
+def download_file(filename):
+    return send_from_directory( app.config['REPORTS_DIRECTORY'],
+                                filename, 
+                                as_attachment=True )
+
 # URL binding
 @app.route("/", methods=['GET', 'POST'])
 # Default handler function which will start when our root web app Url will be visited
 def _index():
-    # Trying to get report Urls
-    vacancy_reports = get_hrefs_from_mongo('occupation')
-    resume_reports = get_hrefs_from_mongo('scriteria')
     # Form lists of URLs
-    vreports = [Markup(f'<a href="{value}" class="links">{key}</a> <br>')
-        for key, value in vacancy_reports.items()]
-    rreports = [Markup(f'<a href="{value}" class="links">{key}</a> <br>')
-        for key, value in resume_reports.items()]
+    reports = get_reports_list('vacancies')
+    vreports = [Markup(f'<a href="/reports/vacancies/{report}.xlsx" class="links">{report}</a> <br>')
+            for report in reports]
+    reports = get_reports_list('resumes')
+    rreports = [Markup(f'<a href="/reports/resumes/{report}.xlsx" class="links">{report}</a> <br>')
+            for report in reports]
     # Render index html page template with our report URLs data
     return render_template('index.html',
                             vreports=vreports,

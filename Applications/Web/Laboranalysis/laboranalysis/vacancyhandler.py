@@ -19,6 +19,8 @@
 # that you can always use and this will be the best choice.
 
 ###############################################################################
+####   This is SERVER version, intended for deploying to OS environment!   ####
+###############################################################################
 
 #---Imports--------------------------------------------------------------------
 #------------------------------------------------------------------------------
@@ -359,7 +361,9 @@ class VacancyHandler:
         located in 'store_path' path'''
 
         def form_sheet(data, columns, name, a_width, b_width):
+            # Defines sheet structure
             sheet = pandas.DataFrame(data, columns=columns)
+            # Add sheet to xlsx document
             sheet.to_excel(writer, name, index=False)
             worksheet = writer.sheets[name]
             worksheet.set_column('A:A', a_width)
@@ -380,6 +384,7 @@ class VacancyHandler:
                 chart.set_legend({'position': 'none'})
             worksheet.insert_chart(code, chart)
 
+        # Xlsx file structure
         table_structure = {
             'Должности': ['Название должности', 'Количество вакансий'],
             'Ключевые навыки': ['Ключевые навыки', 'Вакансий'],
@@ -393,7 +398,7 @@ class VacancyHandler:
             'Зарплата': ['Зарплата', 'Рублей'],
         }
         
-        path = ( f'{self.store_path}/'
+        path = ( f'{self.store_path}/vacancies/'
                  f'{self.search_criteria}-'
                  f'{len(self.vacancies)}.xlsx' )
         

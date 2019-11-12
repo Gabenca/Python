@@ -1,11 +1,36 @@
 
+###############################################################################
+##########################   Ethical disclaimer   #############################
+###############################################################################
+
+# In this application, we work with the portal and API of the headhunter.ru company.
+# We are very grateful to headhunter.ru company for the beautiful portal 
+# and excellently-designed well-documented API, programming with which was a pure pleasure.
+# We are aware of the complexity of the development and maintenance of such services 
+# and such a business as a whole. We are also fully aware that specialized databases 
+# are one of the main assets of the company.
+#
+# In connection with the foregoing, we should in no case forget that:
+#
+#      THIS APPLICATION WAS CREATED EXCLUSIVELY FOR EDUCATIONAL PURPOSES
+#      AND COMPLETELY EXCLUDES THE POSSIBILITY OF ANY BUSINESS USE.
+#
+# Also remember that the company itself provides analytical reporting services 
+# that you can always use and this will be the best choice.
+
+###############################################################################
+##################   This is CONSOLE version, just use it!   #################
+###############################################################################
+
+#---Imports--------------------------------------------------------------------
+#------------------------------------------------------------------------------
+
 import os
 import re
 import json
 import time
 import pandas
 import pickle
-import pymongo
 import cProfile
 import requests
 import statistics
@@ -13,7 +38,8 @@ import collections
 from tqdm import tqdm
 from bs4 import BeautifulSoup
 from filtervocabulary import vocabulary
-from mongocon import MongoConnection
+from pymongo import MongoClient
+from credentials import mongo
 
 def profile(func):
     """Decorator for run function profile"""
@@ -25,6 +51,8 @@ def profile(func):
         return result
     return wrapper
 
+#---Class----------------------------------------------------------------------
+#------------------------------------------------------------------------------
 
 class VacancyHandler:
     '''
@@ -324,10 +352,13 @@ class VacancyHandler:
     #-----------------------------------------------------------------------------------------------------
     def store_vacancies_to_mongo(self):
         '''Store vacancies to mongodb'''
-        # Create collection with vacancies occupation name stored in 'search_criteria'
-        collection = VacancyHandler.mongo_db[self.search_criteria]
-        # Stores insert results in variable
-        collection.insert_many(self.vacancies)
+        # Instantiate MongoDB connection context
+        with MongoClient(mongo) as mongodb:
+            # Create collection with vacancies.
+            # Occupation name stored in 'search_criteria'
+            collection = mongodb.hh_vacancies[self.search_criteria]
+            # Store vacancies to appropriate collection
+            collection.insert_many(self.vacancies)
 
 #---------------------------------------------------------------------------------------------------------
 #---Results-----------------------------------------------------------------------------------------------
@@ -886,16 +917,17 @@ class VacancyHandler:
         self.unique = len({vacancy.get('id')
             for vacancy in self.vacancies})
 
-#---------------------------------------------------------------------------------------------------------
-#---Main--------------------------------------------------------------------------------------------------
-#---------------------------------------------------------------------------------------------------------
+#---Main-----------------------------------------------------------------------
+#------------------------------------------------------------------------------
 
 if __name__ == "__main__":
 
-    v = VacancyHandler('Системный аналитик')
-    pickled_vacancies = ("Y:/YandexDisk/Учёба/Git/Repos/Studies_/"
-                         "Old_Studies_/vacancies/20.02.19/"
-                         "Системный аналитик.pickle")
-    v.unpickle_vacancies(pickled_vacancies)
+    v = VacancyHandler( search_criteria='Высшая школа экономики',
+                        search_field='company_name' )
+
+    ##pickled_vacancies = ("C:/vacancies/20.09.19/"
+    ##                     "Системный аналитик.pickle")
+    ##v.unpickle_vacancies(pickled_vacancies)
+
     v.analyze()
     v.store_results_to_xlsx()

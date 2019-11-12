@@ -7,13 +7,14 @@
     dest: "{{ app_path }}"
   tags: files
 
-- name: Create directory for xlsx reports
+- name: Create directories for xlsx reports
   file:
-    path: "{{ reports_path }}"
+    path: "{{ item }}"
     state: directory
     mode: 0755
     owner: gunicorn
     group: gunicorn
+  loop: "{{ reports_path }}"
   tags: files
 
 - name: Install watchdog timer configuration

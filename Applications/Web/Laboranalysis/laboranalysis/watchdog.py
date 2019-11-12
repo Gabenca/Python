@@ -1,6 +1,16 @@
 
 #!/usr/bin/python3.7
 
+###############################################################################
+# This script runs by OS timer and searches freshly ordered reports.
+# If any exists, it starts data harvest and processing. After it,
+# stores report to the appropriate directory and sends email notification
+# with success message to application admin and report customer. 
+# Finally, it closes the order issue by change order data status.
+###############################################################################
+####   This is SERVER version, intended for deploying to OS environment!   ####
+###############################################################################
+
 # MongoDB connection:
 from pymongo import MongoClient
 # Our send mail class:
@@ -8,6 +18,7 @@ from mailsender import MailSender
 # Our credentials:
 from credentials import mongo, mail_creds
 
+# Message subjects
 problem = 'Laboranalysis application ran into an issue'
 success = 'Ваш отчёт готов!'
 

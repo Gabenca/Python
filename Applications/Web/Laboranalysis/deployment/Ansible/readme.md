@@ -12,3 +12,20 @@ The root of the directory contains two directories:
 
 ### roles directory
 > Contains Ansible roles which include into playbooks and runs indirectly
+
+### Application server Ansible CM configuration directory structure
+
+    /etc/ansible/
+    |
+    ├──ansible.cfg
+    |
+    ├──playbooks/
+    |  └──deploy-laboranalysis.yml
+    |
+    └──roles/
+        ├──backports
+        ├──basedep
+        ├──gunicorn
+        ├──laboranalysis
+        ├──mongodep
+        └──pip
