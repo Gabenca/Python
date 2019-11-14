@@ -1,8 +1,13 @@
 
 ---
 
-packages:
+# Declarates repositories list
+repos:
+  - deb http://deb.debian.org/debian testing main contrib non-free
+  - deb-src http://deb.debian.org/debian testing main contrib non-free
 
+# Declarates packages list
+packages:
   - python3.7
   - python3-ipython
   - python3-pymongo

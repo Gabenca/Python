@@ -1,13 +1,14 @@
 
 ---
 
+# Declarates pip3 package name
 pip_package: python3-pip
 
+# Declarates pip version which will be used to install packages
 pip_executable: pip3
 
+# Declarates packages list
 packages:
-
   - Flask-WTF
   - WTForms
 #  - dqnspython # !!!
-

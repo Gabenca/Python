@@ -1,14 +1,20 @@
 
 ---
 
-- name: Add backports repo
+- name: Add stretch-backports (testing) repositories
   apt_repository:
     repo: "{{ item }}"
     filename: testing #stretch-backports
     state: present
-  loop:
-    - deb http://deb.debian.org/debian testing main contrib non-free
-    - deb-src http://deb.debian.org/debian testing main contrib non-free
+  loop: "{{ repos }}"
+  tags:
+    - provisioning
+    - repo
+
+- name: Set stable repository as default
+  copy:
+    src: "all.pin"
+    dest: "/etc/apt/preferences.d/all.pin"
   tags:
     - provisioning
     - repo

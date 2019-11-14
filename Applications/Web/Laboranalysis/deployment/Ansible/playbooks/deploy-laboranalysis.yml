@@ -1,10 +1,14 @@
----
-# TODO: Resolve dnspython installation issue !!!
 
+---
+
+# Defines hosts on which this playbook will be Play
 - hosts: localhost
+# Defines a connection type to hosts which will be provisioned
   connection: local
+# Defines whether host parameters will be audited
   gather_facts: yes
 
+# Defines the roles which will be involved into this Play
   roles:
     - basedep
     - mongodep
@@ -12,5 +16,3 @@
     - pip
     - laboranalysis
     - gunicorn
-
----

@@ -1,16 +1,17 @@
 
 ---
 
-- name: Install pip
+- name: Install Pip
   package:
     name: "{{ pip_package }}"
     state: present
     update_cache: true
-  tags: packages
+  tags:
+    - packages
 
-
-- name: Install modules
+- name: Install python modules
   pip:
     name: "{{ packages }}"
     executable: "{{ pip_executable }}"
-  tags: modules
+  tags:
+    - modules

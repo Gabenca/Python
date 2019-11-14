@@ -1,9 +1,10 @@
 
 ---
 
-- name: Retry install packages
+- name: Update apt package manager cache
   package:
-    name: "{{ packages }}"
-    state: latest
     update_cache: true
-  tags: provisioning
+  ignore_errors: True
+  tags:
+    - provisioning
+    - packages

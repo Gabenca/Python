@@ -5,3 +5,6 @@
   service:
     name: mongodb
     state: restarted
+  tags:
+    - mongo
+    - service

@@ -1,8 +1,10 @@
 
 ---
 
+# Declarates path into which application will be deployed
 app_path: "/usr/lib/python3/dist-packages"
 
+# Declarates path into which xlsx reports will be stored
 reports_path: 
   - "/var/laboranalysis/reports/vacancies"
   - "/var/laboranalysis/reports/resumes"

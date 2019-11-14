@@ -5,37 +5,54 @@
   apt_key:
     url: https://www.mongodb.org/static/pgp/server-4.2.asc
     state: present
-  tags: keys
+  tags:
+    - keys
+    - repo
+    - mongo
 
-- name: Add mongo repo
+- name: Add mongo repository
   copy:
     dest: "/etc/apt/sources.list.d/mongodb-org-4.2.list"
     content: "deb http://repo.mongodb.org/apt/debian stretch/mongodb-org/4.2 main"
-  tags: repo
+  tags:
+    - repo
+    - mongo
 
-- name: Install mongodb
-  apt:
+- name: Install Mongodb
+  package:
     name: "mongodb-org"
     update_cache: true
     state: "present"
+  tags:
+    - packages
+    - mongo
 
-- name: Create mongodb data dir
+- name: Create Mongodb data dir
   file:
     path: "{{ mongodb_db_path }}"
     state: directory
     mode: 0755
     owner: mongodb
     group: mongodb
+  tags:
+    - files
+    - mongo
 
-- name: Create mongodb service file for systemd
+- name: Create Mongodb service file for systemd
   copy:
     src: "mongodb.service"
     dest: "/etc/systemd/system/mongodb.service"
+  tags:
+    - systemd
+    - mongo
 
-- name: Enable mongodb systemd service
+- name: Enable Mongodb systemd service
   service:
     name: "mongodb"
     enabled: "yes"
+  tags:
+    - systemd
+    - mongo
 
 - name: Write mongod.conf file
   template:
@@ -44,3 +61,7 @@
     backup: "yes"
   notify:
     - Restart mongodb
+  tags:
+    - config
+    - mongo
+    
