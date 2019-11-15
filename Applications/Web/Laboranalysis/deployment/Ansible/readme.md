@@ -52,7 +52,7 @@ The root of the directory contains two directories:
 
 * **Run 'ansible.addrepo' script**
 
-        root@server:~# /bin/sh Python/Applications/Web/Laboranalysis/deployment/Ansible/ansible.addrepo
+        root@server:~# /bin/sh ansible.addrepo
 
 * **Update package manager cache**
 
@@ -60,12 +60,16 @@ The root of the directory contains two directories:
 
 * **Install Ansible**
 
-        root@server:~# aptitude install ansible
+        root@server:~# aptitude install ansible -y
 
 * **Copy roles and playbooks directories into /etc/ansible**
 
         root@server:~# cp -r {roles,playbooks} /etc/ansible
 
-* **Change dir to playbooks and run 'deploy-laboranalysis.yml' playbook**
+* **Change dir to playbooks**
+
+        root@server:~# cd /etc/ansible/playbooks
+
+* **Run 'deploy-laboranalysis.yml' playbook**
 
         root@server:~# ansible-playbook deploy-laboranalysis.yml

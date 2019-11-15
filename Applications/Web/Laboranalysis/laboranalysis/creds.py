@@ -1,4 +1,9 @@
 
+###############################################################################
+#                This file collects some secrets, passwords,
+#              authentications, authorizations, keys an so on.
+###############################################################################
+
 # MongoDB access string
 mongo = 'mongodb://127.0.0.1:27017'
 

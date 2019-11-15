@@ -25,30 +25,38 @@
 #---Imports--------------------------------------------------------------------
 #------------------------------------------------------------------------------
 
+# OS API functions:
 import os
+# Regexp stuff:
 import re
+# [De]Serializing objects:
 import json
+# Delay function:
 import time
+# Excel documents processing:
 import pandas
+# Native objects store:
 import pickle
+# Code profiling:
 import cProfile
+# HTTP requests:
 import requests
+# Some math:
 import statistics
+# Some data structures:
 import collections
 
-# HTML parser
+# HTML parser:
 from bs4 import BeautifulSoup
-# MongoDB connection:
+# MongoDB connection stuff:
 from pymongo import MongoClient
 # Preetty progressbar
 from tqdm import tqdm
 
-# Some stuff
+# Some filter stuff:
 from laboranalysis.filtervocabulary import vocabulary
-# Filesystem location in which reports will be stored
-from laboranalysis.credentials import store_path
-# MongoDB credentials:
-from credentials import mongo
+# Our credentials:
+from laboranalysis.credentials import mongo, store_path
 
 
 #---Class----------------------------------------------------------------------
@@ -80,7 +88,7 @@ class VacancyHandler:
     api_url = 'https://api.hh.ru/vacancies'
 
     def __init__(self,
-        # Text to be searched in vacancy to establish a match condition.
+        # Text to be searched in vacancy to establish a match condition
         # Occupation name, in main
         search_criteria,
         # Place in vacancy in which match condition will be established
@@ -89,17 +97,25 @@ class VacancyHandler:
         # Russia(113), Novosibirsk(1202), Moscow(1) region
         geo_areas=['1202',]):
         
-        # Global path to store pickles and results
-        self.store_path = store_path
-
-        # Text to be searched in vacancy to establish a match condition.
+        # Text to be searched in vacancy to establish a match condition
         # Occupation name, in main
         self.search_criteria = search_criteria
 
         # Region restriction for vacancy search, for example:
         # Russia(113), Novosibirsk(1202) region
         self.search_geo_areas = geo_areas
-        
+
+        # HTTP request to API parameters
+        self.search_parameters = {
+            'text': self.search_criteria,
+            ##'salary': average_salary,
+            'area': self.search_geo_areas,
+            'per_page': 100,
+            'page': 0,
+            'clusters': 'true',
+            'describe_arguments': 'true',
+            }
+
         # Full vacancies batch itself
         self.vacancies = []
 
@@ -158,6 +174,7 @@ class VacancyHandler:
         # HH clusters of vacancies
         self.clusters = None
 
+        # Average, median, modal salaries
         self.salaries = []
 
         # Average salary
@@ -184,35 +201,29 @@ class VacancyHandler:
         self.salaries_by_region = None
 
         # Top of 'strong's' dictionary corpus,
-        # formed from lots of batches of different vacancies retrieved previously
+        # formed from lots of batches of different vacancies
+        # retrieved previously
         self.description_sections_top = frozenset({
             'Требования',
             'Обязанности',
             'Условия',
             'Мы предлагаем',
         })
-
-        # Request to API parameters
-        self.search_parameters = {
-            'text': self.search_criteria,
-            ##'salary': average_salary,
-            'area': self.search_geo_areas,
-            'per_page': 100,
-            'page': 0,
-            'clusters': 'true',
-            'describe_arguments': 'true',
-            }
         
         # Search arguments returned by HH server
         self.search_arguments = None
 
         if search_field:
             self.search_parameters['search_field'] = search_field
-        ##if search_area: self.search_parameters['area'] = search_area
+        ##if search_area: 
+        ##    self.search_parameters['area'] = search_area
 
         # Determines when the class instance is freshly created
         # and actually does not contain vacancies yet
         self.__initial = True
+
+        # Global path to store pickles and results
+        self.store_path = store_path
 
     def __len__(self):
         return len(self.vacancies)
@@ -258,6 +269,8 @@ class VacancyHandler:
 
         # Form a list of full vacancies without request delay
         ##self.vacancies = [requests.get(url).json() for url in tqdm(urls)]
+        
+        # Form a list of full vacancies with request delay
         for url in urls:
             self.vacancies.append(requests.get(url).json())
             time.sleep(int(delay))
@@ -278,21 +291,27 @@ class VacancyHandler:
         response = raw_response.json()
         pages_count = response.get('pages')
         
-        print(f"\nThere are {pages_count*self.search_parameters['per_page']} vacancies",
-              f"on '{self.search_parameters.get('text')}' occupation available on hh.ru",
+        vacancies_amount = pages_count*self.search_parameters['per_page']
+        occupation = self.search_parameters.get('text')
+
+        print(f"\nThere are {vacancies_amount} vacancies",
+              f"on '{occupation}' occupation available on hh.ru",
               f"\n\nRetrieve it now ( [y]es, [n]o ) ?")
         answer = input()
         
         if answer.lower() == 'y':
-            print("\nDo you want to get all the vacancies or only part of them ( [a]ll, [p]art ) ?")
+            print("\nDo you want to get all the vacancies ",
+                  "or only part of them ( [a]ll, [p]art ) ?")
             number = None
             answer = input()
 
             if answer.lower() == 'p':
-                print("\nPlease specify desired number of hundreds (e.g. 2 means 200 vacancies)")
+                print("\nPlease specify desired number ",
+                      "of hundreds (e.g. 2 means 200 vacancies)")
                 number = input()
 
-            print("\nDo you want to add a delay between requests to api ( [y]es, [n]o ) ?")
+            print("\nDo you want to add a delay ",
+                  "between requests to api ( [y]es, [n]o ) ?")
             delay = 0
             answer = input()
 
@@ -343,7 +362,7 @@ class VacancyHandler:
 
     #--------------------------------------------------------------------------
     def store_vacancies_to_mongo(self):
-        '''Store vacancies to mongodb'''
+        '''Store vacancies to MongoDB'''
         # Instantiate MongoDB connection context
         with MongoClient(mongo) as mongodb:
             # Connection to criteria collection of 'hh_vacancies' database
@@ -360,6 +379,7 @@ class VacancyHandler:
         'search_criteria-vacancies_amount.xlsx'
         located in 'store_path' path'''
 
+        # This function forms xlsx document sheet
         def form_sheet(data, columns, name, a_width, b_width):
             # Defines sheet structure
             sheet = pandas.DataFrame(data, columns=columns)
@@ -370,6 +390,7 @@ class VacancyHandler:
             worksheet.set_column('B:B', b_width)
             worksheet.conditional_format('A2:A11', {'type': '3_color_scale'})
 
+        # This function forms xlsx document diagrams
         def form_chart(data, name, amount, type, code):
             workbook = writer.book
             worksheet = writer.sheets[name]
@@ -398,10 +419,12 @@ class VacancyHandler:
             'Зарплата': ['Зарплата', 'Рублей'],
         }
         
+        # Xlsx report file path and name
         path = ( f'{self.store_path}/vacancies/'
                  f'{self.search_criteria}-'
                  f'{len(self.vacancies)}.xlsx' )
         
+        # Instantiate ExcelWriter context
         with pandas.ExcelWriter(path) as writer:
 
             try:
@@ -532,6 +555,7 @@ class VacancyHandler:
 
         # If class instance doesn't contains actual vacancies
         if self.__initial:
+            # Retrieve it
             self._vacancies_retriever(delay=10, number=None)
             ##self._retrievement_confirmator()
         self._duplicate_vacancies_remover()
@@ -678,8 +702,8 @@ class VacancyHandler:
         
         # Sort by number of entries
         self.regions = sorted(regions_counted.items(),
-                                    key=lambda x: x[1],
-                                    reverse=True)
+                              key=lambda x: x[1],
+                              reverse=True)
 
 #------------------------------------------------------------------------------
 #---Extractors-----------------------------------------------------------------
@@ -842,14 +866,6 @@ class VacancyHandler:
     # Get python list of list 'description_sections_top'
     # filtered by custom 'filter_vocabulary' key
     #--------------------------------------------------------------------------
-
-    # Dirty, but fast version
-    ##def _by_word_extractor(self, criteria):
-    ##    result = [element
-    ##        for element in self.description_elements_all
-    ##            if criteria in element]
-    ##    return sorted(result, key=len)
-
     # Clear, but slow version
     def _by_word_extractor(self, criteria):
 
@@ -865,6 +881,13 @@ class VacancyHandler:
                     result.append(element.capitalize())
         
         return sorted(result, key=len)
+    #--------------------------------------------------------------------------
+    # Dirty, but fast version
+    ##def _by_word_extractor(self, criteria):
+    ##    result = [element
+    ##        for element in self.description_elements_all
+    ##            if criteria in element]
+    ##    return sorted(result, key=len)
 
 #------------------------------------------------------------------------------
 #---Calculators----------------------------------------------------------------
@@ -960,7 +983,7 @@ class VacancyHandler:
 #---Misc-----------------------------------------------------------------------
 #------------------------------------------------------------------------------
 
-    # Remove dubplicates in vacancies list
+    # Remove duplicates in vacancies list
     #--------------------------------------------------------------------------
     def _duplicate_vacancies_remover(self):
 

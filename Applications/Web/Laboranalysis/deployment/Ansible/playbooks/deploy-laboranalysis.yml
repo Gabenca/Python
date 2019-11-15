@@ -1,7 +1,10 @@
 
+# This playbook provides a simple way to deploy 
+# the laboranalysis web application to a production server
+
 ---
 
-# Defines hosts on which this playbook will be Play
+# Defines hosts on which this playbook will be Played
 - hosts: localhost
 # Defines a connection type to hosts which will be provisioned
   connection: local
@@ -10,9 +13,18 @@
 
 # Defines the roles which will be involved into this Play
   roles:
+    # Base OS provisioning
     - basedep
+    # Installs MongoDB
     - mongodep
+    # Adds testing repository for new version of Python install
     - backports
+    # Installs some Python modules
     - pip
-    - laboranalysis
+    # Installs Gunicorn WSGI server
     - gunicorn
+    # Deploy our application
+    - laboranalysis
+    # Installs NGINX (fast and reliable webserver)
+    # This is optional role and you can skip it for simple deployments
+    - ansible-role-nginx

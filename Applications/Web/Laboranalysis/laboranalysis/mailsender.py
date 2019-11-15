@@ -3,6 +3,7 @@
 from smtplib         import SMTP_SSL
 from email.mime.text import MIMEText
 from email.header    import Header
+
 # Application admin email credentials:
 from credentials     import mail_creds
 

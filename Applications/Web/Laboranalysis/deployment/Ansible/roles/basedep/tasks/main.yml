@@ -29,7 +29,7 @@
     dest: /etc/apt/sources.list
     owner: root
     mode: 0644
-  notify: Update apt repos
+  notify: Update apt package manager cache
   tags:
     - provisioning
     - repo
