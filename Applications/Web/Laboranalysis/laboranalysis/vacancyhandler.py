@@ -22,8 +22,9 @@
 ####   This is SERVER version, intended for deploying to OS environment!   ####
 ###############################################################################
 
-#---Imports--------------------------------------------------------------------
-#------------------------------------------------------------------------------
+
+##################################  Imports  ##################################
+###############################################################################
 
 # OS API functions:
 import os
@@ -59,34 +60,35 @@ from laboranalysis.filtervocabulary import vocabulary
 from laboranalysis.credentials import mongo, store_path
 
 
-#---Class----------------------------------------------------------------------
-#------------------------------------------------------------------------------
+###################################  Class  ###################################
+###############################################################################
 
 class VacancyHandler:
     '''
-    ----------------------------------------------------
     Class is designed to collect and analyze information
       about vacancies retrieved from HeadHunter REST API 
 
     Public methods:
 
+        unpickle_vacancies(filesystem_store_path)
+        pickle_vacancies()
         exclude_by_region(exclude_geo_area)
         include_by_region(include_geo_area)
-        unpickle_vacancies(filesystem_store_path)
         analyze()
-        pickle_vacancies()
         store_vacancies_to_mongo()
         store_results_to_xlsx()
-    ----------------------------------------------------        
     '''
 
-#------------------------------------------------------------------------------
-#---Initializations------------------------------------------------------------
-#------------------------------------------------------------------------------
+###############################################################################
+##############################  Initializations  ##############################
+###############################################################################
 
     # Base HeadHunter API-url for vacancy retrievement
     api_url = 'https://api.hh.ru/vacancies'
-
+    
+    #--------------------------------------------------------------------------
+    # Class instance constructor
+    #--------------------------------------------------------------------------
     def __init__(self,
         # Text to be searched in vacancy to establish a match condition
         # Occupation name, in main
@@ -152,7 +154,7 @@ class VacancyHandler:
         self.profareas = None
         
         # Specialization areas in retrieved vacancies
-        self.profareas_granular = None
+        self.specializations = None
         
         # Publication dates
         self.dates = None
@@ -200,9 +202,8 @@ class VacancyHandler:
 
         self.salaries_by_region = None
 
-        # Top of 'strong's' dictionary corpus,
-        # formed from lots of batches of different vacancies
-        # retrieved previously
+        # Top of 'strong's' dictionary corpus, formed from
+        # lots of batches of different vacancies retrieved previously
         self.description_sections_top = frozenset({
             'Требования',
             'Обязанности',
@@ -213,6 +214,7 @@ class VacancyHandler:
         # Search arguments returned by HH server
         self.search_arguments = None
 
+        # If parameters were specified when constructing class instance
         if search_field:
             self.search_parameters['search_field'] = search_field
         ##if search_area: 
@@ -220,78 +222,138 @@ class VacancyHandler:
 
         # Determines when the class instance is freshly created
         # and actually does not contain vacancies yet
-        self.__initial = True
+        self.__is_initial = True
 
         # Global path to store pickles and results
         self.store_path = store_path
 
+    # Last three magic methods implements standart Python data model API
+    # They improves objects usability, especially in interactive use
+    
+    #--------------------------------------------------------------------------
+    # Actual vacancies amount in object
+    #--------------------------------------------------------------------------
     def __len__(self):
         return len(self.vacancies)
 
+    #--------------------------------------------------------------------------
+    # Сonvenient access to individual vacancies
+    #--------------------------------------------------------------------------
     def __getitem__(self, position):
         return self.vacancies[position]
 
+    #--------------------------------------------------------------------------
+    # Brief self-presentation of an object
+    #--------------------------------------------------------------------------
     def __repr__(self):
         return (f"Totally {self.__len__()} vacancies on "
         f"'{self.search_parameters.get('text', 'undefined')}' occupation")
 
-#------------------------------------------------------------------------------
-#---Retrievers-----------------------------------------------------------------
-#------------------------------------------------------------------------------
 
-    # Retrieve vacancies from HH
+###############################################################################
+################################  Retrievers  #################################
+###############################################################################
+
+    #--------------------------------------------------------------------------
+    # Retrieves vacancies from HH
     #--------------------------------------------------------------------------
     def _vacancies_retriever(self, delay, number):
 
-        brief_vacancies = []
-        current_page = 0
-        # Vacancies retrievement batch amount limiter (per_page * number)
-        if number is not None: 
-            pages_count = int(number)
-        else:
-            pages_count = current_page + 1
+        #--------------------------------------------------------------------------
+        # Retrieves vacancies with bief description
+        #--------------------------------------------------------------------------
+        def brief_vacancies_retriever():
+            # Brief vacancies batch retrieved directly from search results page
+            brief_vacancies = []
+            # Search results page counter
+            current_page = 0
+            # Vacancies retrievement batch amount limiter (per_page * number)
+            if number is not None: 
+                pages_count = int(number)
+            else:
+                # Set initial value to provide 'while' working possibility
+                pages_count = current_page + 1
 
-        while current_page < pages_count:
-            self.search_parameters['page'] = current_page
-            raw_response = requests.get(VacancyHandler.api_url,
-                                        params = self.search_parameters)
-            response = raw_response.json()
-            brief_vacancies += response.get('items')
-            if number is None:
-                pages_count = response.get('pages')
-            current_page += 1
+            # Until we harvest all vacancies pages
+            while current_page < pages_count:
+                # Set search results page number to make another request
+                self.search_parameters['page'] = current_page
+                # Make another request to HH API
+                raw_response = requests.get(VacancyHandler.api_url,
+                                            params = self.search_parameters)
+                # Deserialize response
+                response = raw_response.json()
+                # Add vacancies to common batch
+                brief_vacancies += response.get('items')
+                # If user don't provide desired vacancies amount
+                if number is None:
+                    # Will retrieved all available
+                    pages_count = response.get('pages')
+                # Go to next search results page
+                current_page += 1
 
-        self.clusters = response.get('clusters')
+            # Collect clusters for the current request
+            self.clusters = response.get('clusters')
+            # Collect search parameters for the current request
+            self.search_arguments = response.get('arguments')
 
-        # Collecting urls which link to full vacancy descriptions
-        urls = [vacancy.get('url')
-            for vacancy in brief_vacancies]
+            # Collecting urls which link to full vacancies
+            urls = [vacancy.get('url')
+                for vacancy in brief_vacancies]
 
-        # Form a list of full vacancies without request delay
-        ##self.vacancies = [requests.get(url).json() for url in tqdm(urls)]
-        
-        # Form a list of full vacancies with request delay
-        for url in urls:
-            self.vacancies.append(requests.get(url).json())
-            time.sleep(int(delay))
+            return urls
 
-        self.search_arguments = response.get('arguments')
+        #--------------------------------------------------------------------------
+        # Retrieves vacancies with full description
+        #--------------------------------------------------------------------------
+        def full_vacancies_retriever():
+            # Checks importing issue
+            if __name__ == "__main__":
+                print("Requesting . . .\n")
+                # Form a list of full vacancies
+                for url in tqdm(urls):
+                    self.vacancies.append(requests.get(url).json())
+                    # With request delay provided by user
+                    time.sleep(int(delay))
+                print("\nComplete!\n\n")
+                print("\nDo you want to pickle freshly retrieved vacancies "
+                    "( [y]es, [n]o ) ?")
+                answer = input()
+                print("\n\n")
+                if answer.lower() == 'y':
+                    self.pickle_vacancies()
+            else:
+                # Form a list of full vacancies
+                for url in urls:
+                    self.vacancies.append(requests.get(url).json())
+                    # With request delay provided by user
+                    time.sleep(int(delay))
+                # Form a list of full vacancies without request delay
+                ##self.vacancies = [requests.get(url).json() for url in tqdm(urls)]
 
+        # Collect urls to full vacancies
+        urls = brief_vacancies_retriever()
+        full_vacancies_retriever()
         # Now the class instance already contains actual vacancies
-        self.__initial = False
+        self.__is_initial = False
 
+    #--------------------------------------------------------------------------
     # Announces general information on the response to the request
     # Asks for confirmation for the full retrievement
     # Start full retrievement, if confirmed
     #--------------------------------------------------------------------------
     def _retrievement_confirmator(self):
-
+        # Make request to HH API
         raw_response = requests.get(VacancyHandler.api_url,
                                     params = self.search_parameters)
+        # Deserialize response
         response = raw_response.json()
+        # Discover amount of search results pages
         pages_count = response.get('pages')
         
+        # Calculate approximate amount of available vacancies
         vacancies_amount = pages_count*self.search_parameters['per_page']
+        # Discover occupation name
         occupation = self.search_parameters.get('text')
 
         print(f"\nThere are {vacancies_amount} vacancies",
@@ -322,47 +384,60 @@ class VacancyHandler:
             print(f"\n\n")
             self._vacancies_retriever(delay, number)
 
-#------------------------------------------------------------------------------
-#---Filters--------------------------------------------------------------------
-#------------------------------------------------------------------------------
 
+###############################################################################
+##################################  Filters  ##################################
+###############################################################################
+    
+    #--------------------------------------------------------------------------
     def exclude_by_region(self, exclude):
-        '''Exclude vacancies by 'exclude' criteria from all vacancies batch'''
+        '''Exclude vacancies by 'exclude' criteria from all vacancies batch
+        '''
         self.vacancies = [vacancy
             for vacancy in self.vacancies
                 if vacancy.get('area').get('name') != exclude]
 
     #--------------------------------------------------------------------------
     def include_by_region(self, include):
-        '''Include vacancies by 'include' criteria from all vacancies batch'''
+        '''Include vacancies by 'include' criteria from all vacancies batch
+        '''
         self.vacancies = [vacancy
             for vacancy in self.vacancies
                 if vacancy.get('area').get('name') == include]
 
-#------------------------------------------------------------------------------
-#---Store----------------------------------------------------------------------
-#------------------------------------------------------------------------------
 
+###############################################################################
+###################################  Store  ###################################
+###############################################################################
+
+    #--------------------------------------------------------------------------
     def pickle_vacancies(self, path=None):
-        '''Store object 'vacancies' into file located in "path"'''
+        '''Store object 'vacancies' into file located in "path"
+        '''
         file_name = f"{self.search_parameters.get('text')}.pickle"
         if path is None:
             path = f"{self.store_path}/"
         file_path = path + file_name
+        # Instantiate filesystem writing context
         with open(file_path, 'wb') as file:
+            # Pickle vacancies into file
             pickle.dump(self.vacancies, file)
 
     #--------------------------------------------------------------------------
     def unpickle_vacancies(self, path):
-        '''Restore object 'vacancies' from file located in "path"'''
+        '''Restore object 'vacancies' from file located in "path"
+        '''
+        # Instantiate filesystem reading context
         with open(path, 'rb') as file:
+            # Add pickled to already presented
             self.vacancies += pickle.load(file)
         # Now the class instance already contains actual vacancies
-        self.__initial = False
+        self.__is_initial = False
 
     #--------------------------------------------------------------------------
     def store_vacancies_to_mongo(self):
-        '''Store vacancies to MongoDB'''
+        '''Store vacancies to MongoDB
+        '''
         # Instantiate MongoDB connection context
         with MongoClient(mongo) as mongodb:
             # Connection to criteria collection of 'hh_vacancies' database
@@ -370,38 +445,52 @@ class VacancyHandler:
             # Put vacancies
             collection.insert_many(self.vacancies)        
 
-#------------------------------------------------------------------------------
-#---Results--------------------------------------------------------------------
-#------------------------------------------------------------------------------
 
+###############################################################################
+##################################  Results  ##################################
+###############################################################################
+
+    #--------------------------------------------------------------------------
     def store_results_to_xlsx(self):
         '''Store analysis result into xlsx file
         'search_criteria-vacancies_amount.xlsx'
-        located in 'store_path' path'''
+        located in 'store_path' path
+        '''
 
+        #----------------------------------------------------------------------
         # This function forms xlsx document sheet
+        #----------------------------------------------------------------------
         def form_sheet(data, columns, name, a_width, b_width):
             # Defines sheet structure
             sheet = pandas.DataFrame(data, columns=columns)
             # Add sheet to xlsx document
             sheet.to_excel(writer, name, index=False)
             worksheet = writer.sheets[name]
+            # Set 'A' (first) column width
             worksheet.set_column('A:A', a_width)
+            # Set 'B' (second) column width
             worksheet.set_column('B:B', b_width)
+            # Colorized stripes from 'A2' to 'A11' lines
             worksheet.conditional_format('A2:A11', {'type': '3_color_scale'})
 
+        #----------------------------------------------------------------------
         # This function forms xlsx document diagrams
+        #----------------------------------------------------------------------
         def form_chart(data, name, amount, type, code):
             workbook = writer.book
             worksheet = writer.sheets[name]
+            # Add chart with custom data to sheet
             chart = workbook.add_chart({'type': type})
             chart.add_series({
                 'categories': f"='{name}'!$A$2:$A${amount}",
                 'values':     f"='{name}'!$B$2:$B${amount}",
             })
+            # Diagram stylization
             if type != 'pie':
-                chart.set_x_axis({'name': data[0], 'num_font':  {'rotation': 45}})
-                chart.set_y_axis({'name': data[1], 'major_gridlines': {'visible': False}})
+                chart.set_x_axis({'name': data[0],
+                                  'num_font':  {'rotation': 45}})
+                chart.set_y_axis({'name': data[1],
+                                  'major_gridlines': {'visible': False}})
                 chart.set_legend({'position': 'none'})
             worksheet.insert_chart(code, chart)
 
@@ -426,7 +515,7 @@ class VacancyHandler:
         
         # Instantiate ExcelWriter context
         with pandas.ExcelWriter(path) as writer:
-
+            # Tries to form sheets
             try:
                 form_sheet( self.vacancy_names, 
                             table_structure['Должности'],
@@ -495,7 +584,7 @@ class VacancyHandler:
                 pass
     
             try:
-                form_sheet( self.profareas_granular, 
+                form_sheet( self.specializations, 
                             table_structure['Специализации'], 
                             'Специализации', 45, 20 )
                 form_chart( table_structure['Специализации'], 
@@ -546,22 +635,28 @@ class VacancyHandler:
             except:
                 pass
 
-#------------------------------------------------------------------------------
-#---Analyze--------------------------------------------------------------------
-#------------------------------------------------------------------------------
 
-    # Call all analyze methods                        
+###############################################################################
+##################################  Analyze  ##################################
+###############################################################################
+
+    #--------------------------------------------------------------------------
     def analyze(self):
-
+        '''Call all analyze methods
+        '''
         # If class instance doesn't contains actual vacancies
-        if self.__initial:
-            # Retrieve it
-            self._vacancies_retriever(delay=10, number=None)
-            ##self._retrievement_confirmator()
+        if self.__is_initial:
+            # Checks importing issue
+            if __name__ == "__main__":
+                self._retrievement_confirmator()
+            else:
+                # Retrieve it
+                self._vacancies_retriever(delay=10, number=None)
+
         self._duplicate_vacancies_remover()
         self._skills_collector()
         self._experience_collector()
-        self._prof_areas_collector()
+        self._prof_spec_collector()
         self._creation_dates_collector()
         self._vacancy_names_collector()
         self._regions_collector()
@@ -573,57 +668,65 @@ class VacancyHandler:
         self._salary_calculator()
         self._employers_collector()
 
-#------------------------------------------------------------------------------
-#---Collectors-----------------------------------------------------------------
-#------------------------------------------------------------------------------
 
-    # Collect key skills
+###############################################################################
+#################################  Collectors  ################################
+###############################################################################
+
+    #--------------------------------------------------------------------------
+    # Collect key skills from vacancies
     #--------------------------------------------------------------------------
     def _skills_collector(self):
 
+        # Collect raw skills
         raw_key_skills = [vacancy.get('key_skills')
             for vacancy in self.vacancies]
 
-        # Cleaning skills
-        mixed_key_skills = [key_skill.get('name')
-            for item in raw_key_skills
-                for key_skill in item]
+        # Clean skills
+        key_skills = [key_skill.get('name')
+            for employer_batch in raw_key_skills
+                for key_skill in employer_batch]
 
-        # Forms {key_skill : number of entries}
-        key_skills_counted = {skill : mixed_key_skills.count(skill)
-            for skill in mixed_key_skills}
+        # Form {key_skill : number of entries}
+        key_skills_counted = {skill : key_skills.count(skill)
+            for skill in key_skills}
 
         # Sort by number of entries
         self.skills_all = sorted(key_skills_counted.items(),
                                  key=lambda x: x[1],
                                  reverse=True)
         
+        # Conveniently cropped batch (first 100)
         self.skills = self.skills_all[0:100]
 
+    #--------------------------------------------------------------------------
     # Collect required work experience from vacancies
     #--------------------------------------------------------------------------
     def _experience_collector(self):
 
+        # Collect raw experience
         raw_experience = [full_vacancy.get('experience').get('name')
             for full_vacancy in self.vacancies]
 
-        # Forms {experience : number of entries}
-        experience = {exp : raw_experience.count(exp)
-            for exp in raw_experience}
+        # Form {experience : number of entries}
+        experience_counted = {experience : raw_experience.count(experience)
+            for experience in raw_experience}
 
         # Sort by number of entries
-        self.experience = sorted(experience.items(),
+        self.experience = sorted(experience_counted.items(),
                                  key=lambda x: x[1],
                                  reverse=True)
 
+    #--------------------------------------------------------------------------
     # Collect vacancy names
     #--------------------------------------------------------------------------
     def _vacancy_names_collector(self):
 
+        # Collect raw vacancy names
         vacancy_names = [vacancy.get('name').lower()
             for vacancy in self.vacancies]
 
-        # Forms {vacancy name : number of entries}
+        # Form {vacancy name : number of entries}
         vacancy_names_counted = {name.capitalize() : vacancy_names.count(name)
             for name in vacancy_names}
 
@@ -632,30 +735,36 @@ class VacancyHandler:
                                     key=lambda x: x[1],
                                     reverse=True)
 
-    # Collect specialization areas from vacancies
     #--------------------------------------------------------------------------
-    def _prof_areas_collector(self):
+    # Collect profareas and specializations from vacancies
+    #--------------------------------------------------------------------------
+    def _prof_spec_collector(self):
 
-        raw_specializations = [full_vacancy.get('specializations')
-            for full_vacancy in self.vacancies]
+        # Collect raw profareas and specializations data
+        raw_prof_spec_data = [vacancy.get('specializations')
+            for vacancy in self.vacancies]
         
-        specializations = [vacancy_specializations
-            for vacancy_specializations_list in raw_specializations
-                for vacancy_specializations in vacancy_specializations_list]
+        # Clean
+        prof_spec_data = [prof_spec_data
+            for prof_spec_data_list in raw_prof_spec_data
+                for prof_spec_data in prof_spec_data_list]
         
+        # Collect raw profareas
         profareas = [key['profarea_name']
-            for key in specializations]
-        
-        profareas_granular = [key['name']
-            for key in specializations]
+            for key in prof_spec_data]
+
+        # Collect raw specializations
+        specializations = [key['name']
+            for key in prof_spec_data]
         
         # Forms {profarea : number of entries}
         profareas_counted = {profarea : profareas.count(profarea)
             for profarea in profareas}
         
-        # Forms {granular profarea : number of entries}        
-        profareas_granular_counted = {profarea : profareas_granular.count(profarea)
-            for profarea in profareas_granular}
+        # Forms {specialization : number of entries}        
+        specializations_counted = {specialization :
+                                   specializations.count(specialization)
+            for specialization in specializations}
 
         # Sort by number of entries
         self.profareas = sorted(profareas_counted.items(),
@@ -663,14 +772,16 @@ class VacancyHandler:
                                 reverse=True)
 
         # Sort by number of entries        
-        self.profareas_granular = sorted(profareas_granular_counted.items(),
+        self.specializations = sorted(specializations_counted.items(),
                                          key=lambda x: x[1],
                                          reverse=True)
     
+    #--------------------------------------------------------------------------
     # Collect creation dates from vacancies
     #--------------------------------------------------------------------------
     def _creation_dates_collector(self):
-
+        
+        # Collect creation dates
         raw_create_dates = [vacancy.get('created_at')
             for vacancy in self.vacancies]
         
@@ -678,25 +789,30 @@ class VacancyHandler:
         self.dates = sorted({date : raw_create_dates.count(date)
             for date in raw_create_dates})
     
+    #--------------------------------------------------------------------------
     # Collect employers
     #--------------------------------------------------------------------------
     def _employers_collector(self):
 
+        # Collect full employers info
         self.employers_full = [vacancy.get('employer')
             for vacancy in self.vacancies]
-
+        
+        # Collect brief employers info
         self.employers_brief = {vacancy.get('employer').get('name') :
                                 vacancy.get('employer').get('alternate_url')
             for vacancy in self.vacancies}
 
-    # Collect regions
+    #--------------------------------------------------------------------------
+    # Collect vacancy regions
     #--------------------------------------------------------------------------
     def _regions_collector(self):
 
+        # Collect vacancy regions
         regions = [vacancy.get('area').get('name')
             for vacancy in self.vacancies]
 
-        # Forms {regions : number of entries}
+        # Form {region : number of entries}
         regions_counted = {region : regions.count(region)
             for region in regions}
         
@@ -705,68 +821,103 @@ class VacancyHandler:
                               key=lambda x: x[1],
                               reverse=True)
 
-#------------------------------------------------------------------------------
-#---Extractors-----------------------------------------------------------------
-#------------------------------------------------------------------------------
 
-    # Wordbags formed from self.description_sections_top, which in turn is
-    # Top of 'strong's' dictionary formed from lots of batches of different vacancies
+###############################################################################
+#################################  Extractors  ################################
+###############################################################################
+
+    #--------------------------------------------------------------------------
+    # Wordbags formed from self.description_sections_top,
+    # which in turn is Top of 'strong's' dictionary 
+    # formed from lots of batches of different vacancies
     #--------------------------------------------------------------------------
     def _wordbags_extractor(self):
 
-        def extract_by_criteria(criteria):
-            
+        #----------------------------------------------------------------------
+        # Forms one aggregated wordbag from all vacancies descriptions content
+        #----------------------------------------------------------------------
+        def extract_aggregated():
+            # Join all vacancies descriptions into one string
+            all_words_in_string = ' '.join(self.description_elements_all)    
+            # Count words occurrences in it
+            bags_words = collections.Counter(re.findall(r'\w+',
+                                             all_words_in_string))
+            # Sort by frequency of entry
+            wordbags_all = sorted(bags_words.items(),
+                                    key=lambda x: x[1],
+                                    reverse=True)
+            # Drop short words (less than 4 letters)
+            result = [word
+                for word in wordbags_all
+                    if len(word[0]) > 4]
+
+            return result
+
+        #----------------------------------------------------------------------
+        # Forms word bag by one of the top 4 (description_sections_top) subject
+        # from its description content
+        #----------------------------------------------------------------------
+        def extract_categorized(criteria):
+            # If criteria keyword in the top (10) of description categories
             if self.description_elements.get(criteria):
+                # Clean occurrences
                 clear_strings = [re.sub("[^А-Яа-я0-9-.\s]", "",
                                         describe_string.lower().strip().strip('.'))
                     for describe_string in self.description_elements.get(criteria)]
 
+                # Remove duplicates
                 unique_clear_set = set(clear_strings)
                 unique_strings = [str(string)
                     for string in unique_clear_set]
-
                 ##unique_strings = sorted(unique_strings, key=len)
+
+                # Count word occurrences in isolated strings
                 bags_words = [collections.Counter(re.findall(r'\w+', string))
                     for string in unique_strings]
-
+                
+                # Join counted word occurrences by all strings batch
                 bag_words = sum(bags_words, collections.Counter())
-                sorted_bag = sorted(bag_words.items(), key=lambda x: x[1], reverse=True)
-                result = [word for word in sorted_bag
-                    if len(word[0]) > 4]
+                # Sort by frequency of entry 
+                sorted_bag = sorted(bag_words.items(),
+                                    key=lambda x: x[1],
+                                    reverse=True)
+                # Drop short words (less than 4 letters)
+                result = [word
+                    for word in sorted_bag
+                        if len(word[0]) > 4]
 
                 return result
         
-        self.wordbags = {criteria : extract_by_criteria(criteria)
+        # Form categorized wordbags by one of the top 4 subject
+        self.wordbags = {criteria : extract_categorized(criteria)
             for criteria in self.description_sections_top}
         
-        all_words_in_string = ' '.join(self.description_elements_all)    
-        bags_words = collections.Counter(re.findall(r'\w+', all_words_in_string))
-        self.wordbags_all = sorted(bags_words.items(),
-                                   key=lambda x: x[1],
-                                   reverse=True)
+        # Form aggregated wordbag from all vacancies descriptions content
+        self.wordbags_all = extract_aggregated()
 
+    #--------------------------------------------------------------------------
     # Extract all english words from vacancy desriptions
     #--------------------------------------------------------------------------
     def _keywords_extractor(self):
 
-        # Texts list from vacancy descriptions
-        descriptions = [BeautifulSoup(vacancy.get('description'), 'html.parser').get_text()
+        # Form list of vacancies descriptions
+        descriptions = [BeautifulSoup(vacancy.get('description'),
+                                      'html.parser').get_text()
             for vacancy in self.vacancies]
 
-        # Extract english words
+        # Extract only english letters in descriptions
         raw_eng_extraxtions = [re.sub("[^A-Za-z]", " ", description.strip())
             for description in descriptions]
-        
-        # Clearing
-        raw_eng_words = [raw_eng_extraxtion.split('  ')
-            for raw_eng_extraxtion in raw_eng_extraxtions]
-        
-        eng_words = [words.strip()
-            for raw_eng_word in raw_eng_words
-                for words in raw_eng_word
-                    if words != '']
-        
+
+        # Clean and form list of words
+        eng_words = [word 
+            for string in raw_eng_extraxtions
+                for word in string.split()]
+
+        # Drop null
         clear_eng_words = list(filter(None, eng_words))
+
+        # Form {word : number of entries}
         eng_words_mixed = {word : clear_eng_words.count(word)
             for word in clear_eng_words}
 
@@ -774,76 +925,93 @@ class VacancyHandler:
         self.keywords_all = sorted(eng_words_mixed.items(),
                                    key=lambda x: x[1],
                                    reverse=True)
+        
+        # Conveniently cropped batch (first 100)
         self.keywords = self.keywords_all[0:100]
 
+    #--------------------------------------------------------------------------
     # Extract child elements from all subject headings (html 'strongs')
     #--------------------------------------------------------------------------
     def _description_elements_extractor(self):
 
         # bs4.BeautifulSoup objects list formed from vacancy descriptions
-        vacancy_descriptions = [BeautifulSoup(vacancy.get('description'), 'html.parser')
+        description_soups = [BeautifulSoup(vacancy.get('description'), 'html.parser')
             for vacancy in self.vacancies]
         
+        # Extract content framed in <p> tags
         p_tags = [p.text.strip().lower()
-            for soup in vacancy_descriptions
+            for soup in description_soups
                 for p in soup.find_all('p')]
 
+        # Extract content framed in <li> tags
         li_tags = [li.text.strip().lower()
-            for soup in vacancy_descriptions
+            for soup in description_soups
                 for li in soup.find_all('li')]
         
+        # Join and drop dublicates
         self.description_elements_all = list(set(p_tags + li_tags))
     
+    #--------------------------------------------------------------------------
     # Extract multiple different things from vacancy description bodies
     #--------------------------------------------------------------------------
     def _description_sections_extractor(self):
 
         # bs4.BeautifulSoup objects list formed from vacancy descriptions
-        description_soups = [BeautifulSoup(vacancy.get('description'), 'html.parser')
+        description_soups = [BeautifulSoup( vacancy.get('description'),
+                                            'html.parser' )
             for vacancy in self.vacancies]
         
-        # Vacancy descriptions sections list grouped by vacancy framed into <strong> tags
+        # Vacancy descriptions sections list grouped
+        # by vacancy framed into <strong> tags
         strong_soups = [description_soup.findAll('strong')
             for description_soup in description_soups]
 
-        # All vacancy descriptions sections from all vacancies in common list
+        # All vacancy descriptions sections
+        # from all vacancies in common list
         strongs = [strong.text
             for strong_soup in strong_soups
                 for strong in strong_soup]
 
-        # Clearing
-        clear_strongs = [re.sub("[^А-Яа-я\s]", "", strong.strip())
+        # Drop english text
+        russian_strongs = [re.sub("[^А-Яа-я\s]", "", strong.strip())
             for strong in strongs]
 
-        clear_strongs = list(filter(None, clear_strongs))
-        clear_strongs = list(filter(lambda x: x!=' ', clear_strongs))
+        # Drop null
+        clear_strongs = list(filter(None, russian_strongs))
+        # Drop excess spaces
+        clear_strongs = [' '.join(string.split()) for string in clear_strongs]
+        # Drop empty
+        clear_strongs = [string for string in clear_strongs if string]
 
-        ##self.description_sections = clear_strongs
-
-        # Forms {strong : number of entries}
-        strongs_counted = {strong : clear_strongs.count(strong)
-            for strong in clear_strongs}
+        # Forms {string : number of entries}
+        strongs_counted = {string : clear_strongs.count(string)
+            for string in clear_strongs}
 
         # Sort by number of entries
         sorted_strongs = sorted(strongs_counted.items(),
                                 key=lambda x: x[1],
                                 reverse=True)
         
+        # Select text sorted by length
         self.description_sections = sorted([strong[0]
             for strong in sorted_strongs], key=len, reverse=True)
         
+        # Top 10 string by number of entries 
         strong_top = [strong[0]
             for strong in sorted_strongs[:10]]
 
+        # Form dict with top 10 elements as keys
         self.description_elements = {key: []
             for key in strong_top}
-
+        
+        # Form dict with top 4 sections as keys
         self.description_elements_top = {key: []
             for key in self.description_sections_top}
 
         for description in description_soups:
             strongs = description.findAll('strong')
             for strong in strongs:
+
                 for top in strong_top:
                     if strong.get_text().count(top):
                     ##if len(strong.findNext().findAll('li')) > 0:
@@ -862,42 +1030,21 @@ class VacancyHandler:
                                 for item in strong.findNext().findAll('li')]
                         except AttributeError:
                             pass
-       
-    # Get python list of list 'description_sections_top'
-    # filtered by custom 'filter_vocabulary' key
+
+
+###############################################################################
+#################################  Calculators  ###############################
+###############################################################################
+
     #--------------------------------------------------------------------------
-    # Clear, but slow version
-    def _by_word_extractor(self, criteria):
-
-        result = list()   
-
-        for element in self.description_elements_all:
-            if criteria in element:
-                if element:
-                    while element[0].isalpha() == False:
-                        element = element.lstrip(element[0])
-                        if not element:
-                            break
-                    result.append(element.capitalize())
-        
-        return sorted(result, key=len)
-    #--------------------------------------------------------------------------
-    # Dirty, but fast version
-    ##def _by_word_extractor(self, criteria):
-    ##    result = [element
-    ##        for element in self.description_elements_all
-    ##            if criteria in element]
-    ##    return sorted(result, key=len)
-
-#------------------------------------------------------------------------------
-#---Calculators----------------------------------------------------------------
-#------------------------------------------------------------------------------
-
     # Calculate average, median, modal salaries
     # and group salaries into number of clusters
     #--------------------------------------------------------------------------
     def _salary_calculator(self):
-        
+
+        #----------------------------------------------------------------------
+        # Return appropriate salary group by salary value
+        #----------------------------------------------------------------------
         def _get_salary_group(salary):
             return {
                 salary < 20000: 'Менее 20000',
@@ -954,9 +1101,11 @@ class VacancyHandler:
                         salary_all.append(salary.get('to'))
                         sum += salary.get('to')
                         total += 1
-        
+
+        # Calculate median salary
         self.median_salary = statistics.median(salary_all)
-        
+
+        # Calculate average salary        
         if total > 0:
             self.average_salary = round(sum/total)
 
@@ -979,10 +1128,49 @@ class VacancyHandler:
                          ('Модальная', self.modal_salary)
             ]
 
-#------------------------------------------------------------------------------
-#---Misc-----------------------------------------------------------------------
-#------------------------------------------------------------------------------
 
+###############################################################################
+###################################  Helpers  #################################
+###############################################################################
+
+    #--------------------------------------------------------------------------       
+    # Get python list of list 'description_sections_top'
+    # filtered by custom 'filter_vocabulary' key
+    #--------------------------------------------------------------------------
+    # Clear, but slow version
+    def _by_word_extractor(self, criteria):
+
+        result = []
+
+        for element in self.description_elements_all:
+            if criteria in element:
+                if element:
+                    # Clen string from misc symbols
+                    while element[0].isalpha() == False:
+                        element = element.lstrip(element[0])
+                        if not element:
+                            break
+                    result.append(element.capitalize())
+        
+        return sorted(result, key=len)
+
+    #--------------------------------------------------------------------------       
+    # Get python list of list 'description_sections_top'
+    # filtered by custom 'filter_vocabulary' key
+    #--------------------------------------------------------------------------
+    # Dirty, but fast version
+    ##def _by_word_extractor(self, criteria):
+    ##    result = [element
+    ##        for element in self.description_elements_all
+    ##            if criteria in element]
+    ##    return sorted(result, key=len)
+
+
+###############################################################################
+####################################  Misc  ###################################
+###############################################################################
+    
+    #--------------------------------------------------------------------------
     # Remove duplicates in vacancies list
     #--------------------------------------------------------------------------
     def _duplicate_vacancies_remover(self):
@@ -995,6 +1183,7 @@ class VacancyHandler:
 
         self.vacancies = unique_vacancies
 
+    #--------------------------------------------------------------------------
     # Count unique vacancies in vacancies list
     #--------------------------------------------------------------------------
     def _unique_counter(self):
@@ -1002,13 +1191,14 @@ class VacancyHandler:
             for vacancy in self.vacancies})
 
 
-#---Main-----------------------------------------------------------------------
-#------------------------------------------------------------------------------
+###################################  Main  ####################################
+###############################################################################
 
+# Checks importing issue
 if __name__ == "__main__":
 
-    vacancies = VacancyHandler('Системный администратор')
-    pickled_vacancies = (f"{store_path}/SA.pickle")
-    vacancies.unpickle_vacancies(pickled_vacancies)
+    vacancies = VacancyHandler('DevOps')
+    ##pickled_vacancies = (f"{store_path}/SA.pickle")
+    ##vacancies.unpickle_vacancies(pickled_vacancies)
     vacancies.analyze()
     vacancies.store_results_to_xlsx()
