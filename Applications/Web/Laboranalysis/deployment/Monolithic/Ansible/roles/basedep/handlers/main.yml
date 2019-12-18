@@ -1,0 +1,10 @@
+
+---
+
+- name: Update apt package manager cache
+  package:
+    update_cache: true
+  ignore_errors: True
+  tags:
+    - provisioning
+    - packages

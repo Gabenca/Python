@@ -1,0 +1,22 @@
+
+---
+
+# TODO: Resolve dnspython installation issue!!!
+
+# If not 'host_key_checking = False' in cfg file, than,
+# before run this task on new host, ssh to it and add ssh keys on offer
+
+- hosts: provisioned
+
+  gather_facts: yes
+
+  become: yes
+  become_method: su
+
+#  vars:
+
+  roles:
+
+    - basedep
+    - nfsclnt
+    - geerlingguy.docker

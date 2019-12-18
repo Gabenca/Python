@@ -2,10 +2,11 @@
 **This directory contains Ansible CM playbooks and roles for laboranalysis Python application deployment.**
 
 ## Directory structure
-The root of the directory contains two directories: 
+The root contains two directories and one shell script: 
 
 * **playbooks**
 * **roles**
+* **ansible.addrepo**
 
 ### playbooks directory
 > Contains Ansible playbooks which runs directly
@@ -44,7 +45,7 @@ The root of the directory contains two directories:
 
 * **Copy application files into /etc/ansible**
 
-        root@server:~# cp -r Python\Applications\Web\Laboranalysis\laboranalysis Python\Applications\Web\Laboranalysis\deployment\Ansible\roles\laboranalysis\files
+        root@server:~# cp -r Python/Applications/Web/Laboranalysis/laboranalysis Python/Applications/Web/Laboranalysis/deployment/Ansible/roles/laboranalysis/files
 
 * **Change dir to 'Python/Applications/Web/Laboranalysis/deployment/Ansible'**
 

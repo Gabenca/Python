@@ -1197,7 +1197,9 @@ class VacancyHandler:
 # Checks importing issue
 if __name__ == "__main__":
 
-    vacancies = VacancyHandler('DevOps')
+    vacancies = VacancyHandler( search_criteria='Технический писатель',
+                                search_field='name',
+                                geo_areas=['113',] )
     ##pickled_vacancies = (f"{store_path}/SA.pickle")
     ##vacancies.unpickle_vacancies(pickled_vacancies)
     vacancies.analyze()

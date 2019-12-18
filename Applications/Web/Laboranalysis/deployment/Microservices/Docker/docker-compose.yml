@@ -1,0 +1,77 @@
+
+###############################################################################
+#                                                                             #
+#           LABORANALYSIS DOCKER-COMPOSE FILE (all infrastructure)            #
+#                                                                             #
+###############################################################################
+#  This is CONTAINER version, intended for deploying to DOCKER environment!   #
+###############################################################################
+
+# Defines the docker-compose file format version
+version: '3'
+
+# This is where we specify our individual Docker containers,
+# mongo database, flask application and then nginx web-server
+services:
+
+# MongoDB container provisioning definitions
+#------------------------------------------------------------------------------
+  mongo:
+    # Name of docker container
+    container_name: mongo
+    # Base image from which container will be deployed
+    image: mongo:latest
+    restart: always
+    # Map host directory with databases to container directory (host:container)
+    volumes:
+      - /var/lib/docker/storage/laboranalysis/databases:/data/db
+    # Map host TCP port to container TCP port (host:container)
+    # We use default MongoDB ports
+    ports:
+      - 27017:27017
+
+# Web application container provisioning definitions
+#------------------------------------------------------------------------------
+  flask:
+    # Name of docker container
+    container_name: flask
+    restart: always
+    # Refers to the location the Dockerfile from which container 
+    # will be provisioned, is in relation to the docker-compose.yml file
+    build: ./flask
+    # Map host directory with reports to container directory (host:container)
+    volumes:
+      - /var/lib/docker/storage/laboranalysis/reports:/var/laboranalysis/reports
+    # Map host TCP port to container TCP port (host:container)
+    # We bind the port to 5000, which also specified in nginx.conf
+    ports:
+      - 5000:5000
+    # Sets dependency order
+    # 'mongo' container must be provisioned and start
+    # strictly before 'flask' container
+    depends_on:
+      - mongo
+    # Containers for the linked service are reachable
+    # at a hostname identical to the alias, 
+    # or the service name if no alias was specified.
+    links:
+      - mongo
+ 
+# Reverse proxy container provisioning definitions
+#------------------------------------------------------------------------------
+  nginx:
+    # Name of docker container
+    container_name: nginx
+    restart: always
+    # Refers to the location the Dockerfile from which container 
+    # will be provisioned, is in relation to the docker-compose.yml file
+    build: ./nginx
+    # Map host TCP port to container TCP port (host:container)
+    # We use the well-known http port is 80
+    ports:
+      - 80:80
+    # Sets dependency order
+    # 'flask' container must be provisioned and start
+    # strictly before 'nginx' container
+    depends_on:
+      - flask

@@ -1,0 +1,37 @@
+
+---
+
+- name: Install packages
+  package:
+    name: "{{ packages }}"
+    state: latest
+    update_cache: true
+  register: install
+  ignore_errors: True
+  tags:
+    - provisioning
+    - packages
+
+- name: Upgrade all packages
+  package:
+    upgrade: yes
+    update_cache: true
+    cache_valid_time: 86400
+  register: upgrade
+  ignore_errors: True
+  tags:
+    - provisioning
+    - packages
+
+- name: Adding debian repositories 'contrib', 'non-free'
+  template:
+    src: sources.list.j2
+    dest: /etc/apt/sources.list
+    owner: root
+    mode: 0644
+  notify: Update apt package manager cache
+  tags:
+    - provisioning
+    - repo
+    - config
+    

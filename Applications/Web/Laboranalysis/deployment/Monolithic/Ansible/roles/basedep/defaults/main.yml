@@ -1,0 +1,7 @@
+
+---
+
+# Declarates packages list
+packages: 
+  - aptitude 
+  - mc

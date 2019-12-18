@@ -1,0 +1,40 @@
+
+
+###############################################################################
+#                                                                             #
+#                   NGINX DOCKERFILE (reverse web proxy)                      #
+#                                                                             #
+# Special thanks to Miguel Grinberg (miguelgrinberg.com)                      #
+# for excellent dockerfile commands explanation                               #
+###############################################################################
+#  This is CONTAINER version, intended for deploying to DOCKER environment!   #
+###############################################################################
+
+# Each line in the Dockerfile is a command.
+# The 'FROM' command specifies the base container image on which the new image
+# will be built. The idea is that you start from an existing image,
+# add or change some things, and you end up with a derived image.
+# In this case we use default NGINX image provided by vendor.
+FROM nginx:latest
+
+# The 'RUN' command executes an arbitrary command in the context
+# of the container. This would be similar to you typing the command 
+# in a shell prompt. We remove 'default.conf' file frome 'conf.d'
+# directory which stores additional configs 
+# in addition to main 'nginx.conf' file.
+RUN rm /etc/nginx/conf.d/default.conf
+
+# The 'COPY' command transfers files from host machine to the container
+# file system. The source file(s) must be relative to the directory
+# where the Dockerfile is located.
+# Copy our config which provide reverse proxying for our web application.
+COPY nginx.conf /etc/nginx/conf.d
+
+# The 'EXPOSE' command configures the port that this container will be using
+# for its server. This is necessary so that Docker can configure the network
+# in the container appropriately. We use the well-known http port is 80,
+# but this can be any port you preferred.
+EXPOSE 80
+
+# In 'CMD' we start nginx flags and arguments.
+CMD ["nginx", "-g", "daemon off;"]

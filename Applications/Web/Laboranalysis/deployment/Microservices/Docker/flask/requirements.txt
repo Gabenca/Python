@@ -1,0 +1,12 @@
+gunicorn
+pymongo
+requests
+tqdm
+bs4
+dnspython
+Flask
+Flask-WTF
+WTForms
+pandas
+boto3
+lxml

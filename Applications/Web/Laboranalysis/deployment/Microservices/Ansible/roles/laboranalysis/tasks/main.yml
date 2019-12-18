@@ -1,0 +1,26 @@
+
+---
+
+- name: Create directories for MongoDB database
+file:
+  path: "{{ db_path }}"
+  state: directory
+  mode: 0755
+  owner: laboranalysis
+  group: laboranalysis
+tags:
+  - files
+  - laboranalysis
+
+
+- name: Create directories for xlsx reports
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: 0755
+    owner: laboranalysis
+    group: laboranalysis
+  loop: "{{ reports_path }}"
+  tags:
+    - files
+    - laboranalysis

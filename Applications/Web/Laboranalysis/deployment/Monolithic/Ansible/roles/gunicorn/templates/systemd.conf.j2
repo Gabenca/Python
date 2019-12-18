@@ -10,7 +10,8 @@ PermissionsStartOnly = true
 User = {{ gunicorn_user }}
 Group = {{ gunicorn_user }}
 WorkingDirectory = {{ gunicorn_app_dir }}
-ExecStart = /usr/local/bin/gunicorn --bind=0.0.0.0 wsgi:app 
+##ExecStart = /usr/local/bin/gunicorn --bind=0.0.0.0 wsgi:app
+ExecStart = /usr/local/bin/gunicorn --workers 3 --bind unix:{{ gunicorn_app_name }}.sock -m 007 wsgi:app
 Restart = always
 
 [Install]

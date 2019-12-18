@@ -1,0 +1,10 @@
+
+---
+
+# Declarates MongoDB database store path 
+db_path: "/var/lib/docker/storage/laboranalysis/databases"
+
+# Declarates path into which xlsx reports will be stored
+reports_path: 
+  - "/var/lib/docker/storage/laboranalysis/reports/resumes"
+  - "/var/lib/docker/storage/laboranalysis/reports/vacancies"
