@@ -1,22 +1,21 @@
 
+# This playbook provides a simple way to deploy 
+# the laboranalysis web application to a production server
+
 ---
 
-# TODO: Resolve dnspython installation issue!!!
-
-# If not 'host_key_checking = False' in cfg file, than,
-# before run this task on new host, ssh to it and add ssh keys on offer
-
-- hosts: provisioned
-
+# Defines hosts on which this playbook will be Played
+- hosts: localhost
+# Defines a connection type to hosts which will be provisioned
+  connection: local
+# Defines whether host parameters will be audited
   gather_facts: yes
 
-  become: yes
-  become_method: su
-
-#  vars:
-
+# Defines the roles which will be involved into this Play
   roles:
-
+    # Base OS provisioning
     - basedep
-    - nfsclnt
+    # Deploy our application
+    - laboranalysis
+    # Deploy docker stuff
     - geerlingguy.docker

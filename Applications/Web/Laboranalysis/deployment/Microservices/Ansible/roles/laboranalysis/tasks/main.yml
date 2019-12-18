@@ -1,16 +1,27 @@
 
 ---
 
-- name: Create directories for MongoDB database
-file:
-  path: "{{ db_path }}"
-  state: directory
-  mode: 0755
-  owner: laboranalysis
-  group: laboranalysis
-tags:
-  - files
-  - laboranalysis
+  - name: Create laboranalysis user
+    user:
+      name: laboranalysis
+      system: yes
+      shell: /bin/false
+      state: present
+    tags:
+      - users
+      - laboranalysis
+
+
+  - name: Create directories for MongoDB database
+    file:
+      path: "{{ db_path }}"
+      state: directory
+      mode: 0755
+      owner: laboranalysis
+      group: laboranalysis
+    tags:
+      - files
+      - laboranalysis
 
 
 - name: Create directories for xlsx reports

@@ -83,7 +83,4 @@ ENV FLASK_APP application.py
 # This is the command that will start the application web server.
 # In 'CMD' we provide gunicorn flags and arguments.
 ENTRYPOINT ["gunicorn"]
-CMD ["wsgi:app",
-     "-b", "5000", 
-     "--access-logfile", "-", 
-     "--error-logfile", "-"]
+CMD ["wsgi:app", "-b", "5000", "--access-logfile", "-", "--error-logfile", "-"]

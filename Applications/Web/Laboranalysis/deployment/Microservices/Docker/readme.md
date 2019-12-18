@@ -16,11 +16,11 @@ The root contains two directories and one 'yml' file:
 
 ### Deployment process:
 
-**To start the second stage of deployment you must successfully complete the first deployment stage. If not so, go to [https://github.com/fgm-public/Python/Applications/Web/Laboranalysis/deployment/Microservices/Ansible](https://github.com/fgm-public/Python/Applications/Web/Laboranalysis/deployment/Microservices/Ansible) and read readme.md for further instructions.**
+To start the second stage of deployment you must successfully complete the first deployment stage. If not so, go to [https://github.com/fgm-public/Python/Applications/Web/Laboranalysis/deployment/Microservices/Ansible](https://github.com/fgm-public/Python/tree/master/Applications/Web/Laboranalysis/deployment/Microservices/Ansible) for further instructions.
 
 * **Copy web application files into flask container build directory**
 
-        root@server:~# cp -r Python/Applications/Web/Laboranalysis/laboranalysis Python/Applications/Web/Laboranalysis/deployment/Microservices/Docker/flask
+        root@server:~# cp -r Python/Applications/Web/Laboranalysis/laboranalysis/flask_app/. Python/Applications/Web/Laboranalysis/deployment/Microservices/Docker/flask/laboranalysis
 
 * **Set location to directory which contains docker-compose.yml file**
 

@@ -68,4 +68,4 @@ The root contains two directories and one shell script:
 
         root@server:~# ansible-playbook laboranalysis-docker.yml
 
-* **Go to [https://github.com/fgm-public/Python/Applications/Web/Laboranalysis/deployment/Microservices/Docker](https://github.com/fgm-public/Python/Applications/Web/Laboranalysis/deployment/Microservices/Docker) and read readme.md for further instructions**
+* Go to [https://github.com/fgm-public/Python/Applications/Web/Laboranalysis/deployment/Microservices/Docker](https://github.com/fgm-public/Python/tree/master/Applications/Web/Laboranalysis/deployment/Microservices/Docker) for further instructions
