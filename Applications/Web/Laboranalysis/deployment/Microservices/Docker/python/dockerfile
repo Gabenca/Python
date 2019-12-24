@@ -47,25 +47,3 @@ COPY requirements.txt ./
 # requirements.txt file. --no-cache-dir flag provide thin installation
 # which prevents docker image overgrowth.
 RUN pip install --no-cache-dir -r requirements.txt
-
-# Python base container for applications containers provisioning definitions
-#------------------------------------------------------------------------------
-  mongo:
-    # Name of docker container
-    container_name: python:laboranalysis
-    # Base image on which the container will be built
-    image: mongo:latest
-    # Configures to restart container when it exit or failure
-    restart: always
-    deploy:
-      restart_policy:
-        condition: any
-    # Maps host directory with databases
-    # to container directory (host directory : container directory)
-    volumes:
-      - /var/lib/docker/storage/laboranalysis/databases:/data/db
-    # Maps host TCP port to container TCP port
-    # (host port : container port)
-    # We use default MongoDB ports
-    ports:
-      - 27017:27017

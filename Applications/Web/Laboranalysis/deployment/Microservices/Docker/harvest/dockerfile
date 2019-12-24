@@ -16,9 +16,10 @@
 # to provide more than one variant. The name of image is python,
 # which is the official Docker image for Python. The tags for this image
 # allow you to specify the interpreter version and base operating system.
-# The 3.8-slim-buster tag selects a Python 3.8 interpreter
-# installed on lightweight version of Debian 10 (Buster) Linux.
-FROM compose2_laboranalysis
+# The 'docker_laboranalysis' is a generic python container image
+# which contains all requirement python modules for our python-based containers.
+# We create it firstly in docker-compose
+FROM docker_laboranalysis
 
 # Copy our application distro files to container
 COPY laboranalysis laboranalysis

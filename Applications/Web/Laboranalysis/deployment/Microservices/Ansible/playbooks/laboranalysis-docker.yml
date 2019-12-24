@@ -15,7 +15,7 @@
   roles:
     # Base OS provisioning
     - basedep
-    # Deploy our application
+    # Creates directories, users
     - laboranalysis
     # Deploy docker stuff
     - geerlingguy.docker
