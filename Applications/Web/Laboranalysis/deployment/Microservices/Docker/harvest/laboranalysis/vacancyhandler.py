@@ -57,9 +57,9 @@ from pymongo import MongoClient
 from tqdm import tqdm
 
 # Some filter stuff:
-from laboranalysis.filtervocabulary import vocabulary
+from filtervocabulary import vocabulary
 # Our credentials:
-from laboranalysis.credentials import mongo, store_path
+from credentials import mongo, store_path
 
 
 ###################################  Class  ###################################

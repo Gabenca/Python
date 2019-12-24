@@ -22,6 +22,9 @@ To start the second stage of deployment you must successfully complete the first
 
         root@server:~# cp -r Python/Applications/Web/Laboranalysis/laboranalysis/flask_app/. Python/Applications/Web/Laboranalysis/deployment/Microservices/Docker/flask/laboranalysis
 
+Don't forget to add your credentials to the flask application folder!
+Here [https://github.com/fgm-public/Python/Applications/Web/Laboranalysis/deployment/Microservices/Ansible](https://github.com/fgm-public/Python/tree/master/Applications) it described in more detail.
+
 * **Set location to directory which contains docker-compose.yml file**
 
         root@server:~# cd Python/Applications/Web/Laboranalysis/deployment/Microservices/Docker

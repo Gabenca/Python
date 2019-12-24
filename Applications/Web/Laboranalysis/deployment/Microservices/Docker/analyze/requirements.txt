@@ -1,0 +1,7 @@
+openpyxl
+requests
+pymongo
+pandas
+tqdm
+lxml
+bs4

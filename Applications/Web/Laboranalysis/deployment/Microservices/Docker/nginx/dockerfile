@@ -1,11 +1,9 @@
 
 
 ###############################################################################
-#                                                                             #
 #                   NGINX DOCKERFILE (reverse web proxy)                      #
-#                                                                             #
-# Special thanks to Miguel Grinberg (miguelgrinberg.com)                      #
-# for excellent dockerfile commands explanation                               #
+#          Special thanks to Miguel Grinberg (miguelgrinberg.com)             #
+#              for excellent dockerfile commands explanation                  #
 ###############################################################################
 #  This is CONTAINER version, intended for deploying to DOCKER environment!   #
 ###############################################################################
@@ -14,7 +12,7 @@
 # The 'FROM' command specifies the base container image on which the new image
 # will be built. The idea is that you start from an existing image,
 # add or change some things, and you end up with a derived image.
-# In this case we use default NGINX image provided by vendor.
+# In this case we use default NGINX image provided by its vendor.
 FROM nginx:latest
 
 # The 'RUN' command executes an arbitrary command in the context

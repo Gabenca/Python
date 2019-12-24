@@ -1,11 +1,8 @@
 
 ###############################################################################
-#                                                                             #
-#                LABORANALYSIS DOCKERFILE (web application)                   #
-#                                                                             #
+#              LABORANALYSIS DOCKERFILE (analyze application)                 #
 #          Special thanks to Miguel Grinberg (miguelgrinberg.com)             #
 #              for excellent dockerfile commands explanation                  #
-#                                                                             #
 ###############################################################################
 #  This is CONTAINER version, intended for deploying to DOCKER environment!   #
 ###############################################################################
@@ -21,9 +18,37 @@
 # allow you to specify the interpreter version and base operating system.
 # The 3.8-slim-buster tag selects a Python 3.8 interpreter
 # installed on lightweight version of Debian 10 (Buster) Linux.
-FROM compose2_laboranalysis
+FROM python:3.8-slim-buster
 
-# Copy our web application distro files to container
+# The 'RUN' command executes an arbitrary command in the context
+# of the container. This would be similar to you typing the command 
+# in a shell prompt. The 'adduser laboranalysis' command creates a new user
+# named 'laboranalysis'. The 'mkdir' command creates appropriate directory
+# in container filesystem in which xlsx reports will be stored. 
+RUN adduser laboranalysis
+RUN mkdir -p /var/laboranalysis/reports
+
+# The 'WORKDIR' command sets a default directory where the application
+# is going to be installed. When the 'laboranalysis' account was created,
+# a home directory for this account was created too, now make that directory
+# the default. The new default directory is going to apply
+# to any remaining commands in the Dockerfile, and also later
+# when the container is executed.
+WORKDIR /home/laboranalysis
+
+# The 'COPY' command transfers files from host machine to the container
+# file system. The source file(s) must be relative to the directory
+# where the Dockerfile is located. The destination can be an absolute path,
+# or a path relative to the directory that was set
+# in a previous 'WORKDIR' command.
+COPY requirements.txt ./
+
+# The 'RUN' pip install command installs python modules listed in 
+# requirements.txt file. --no-cache-dir flag provide thin installation
+# which prevents docker image overgrowth.
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy our application distro files to container
 COPY laboranalysis laboranalysis
 
 # Set new default location
@@ -41,20 +66,9 @@ RUN chown -R laboranalysis:laboranalysis ./
 # for any subsequent instructions, and also for when the container is started.
 USER laboranalysis
 
-# The 'EXPOSE' command configures the port that this container will be using
-# for its server. This is necessary so that Docker can configure the network
-# in the container appropriately. We use the standard Flask port 5000,
-# but this can be any port you preferred.
-EXPOSE 5000
-
-# The ENV command sets an environment variable inside the container.
-# I need to set FLASK_APP, which is required to use the flask command.
-ENV FLASK_APP application.py
-
 # Finally, the 'ENTRYPOINT' command defines the default command
 # that should be executed when the container is started.
-# This is the command that will start the application web server.
-ENTRYPOINT ["gunicorn"]
-# In 'CMD' we provide gunicorn flags and arguments.
-# We bind gunicorn to TCP port 5000
-CMD ["-b", ":5000", "--access-logfile", "-", "--error-logfile", "-", "wsgi:app"]
+# This is the command that will start the python interpreter.
+ENTRYPOINT ["python"]
+# In 'CMD' we provide main application file.
+CMD ["analyze.py"]

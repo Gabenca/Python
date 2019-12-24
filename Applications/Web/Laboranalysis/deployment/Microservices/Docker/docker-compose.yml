@@ -1,8 +1,6 @@
 
 ###############################################################################
-#                                                                             #
 #           LABORANALYSIS DOCKER-COMPOSE FILE (all infrastructure)            #
-#                                                                             #
 ###############################################################################
 #  This is CONTAINER version, intended for deploying to DOCKER environment!   #
 ###############################################################################
@@ -10,43 +8,170 @@
 # Defines the docker-compose file format version
 version: '3'
 
-# This is where we specify our individual Docker containers,
-# mongo database, flask application and then nginx web-server
+# This is where we specify our private virtual networks
+# which elaborated to inter-container communications with
+# logical isolation between different type of traffic
+networks:
+  # Logical subnet which intended to pass-thru http traffic
+  frontend:
+  # Logical subnet which intended to pass-thru database traffic
+  backend:
+
+# This is where we specify our individual Docker containers:
+# laboranalysis (base generic container for other python containers),
+# mongo database, flask application, nginx web-server and then
+# all processing applications such 'harvest', 'analyze', 'notify'
 services:
 
-# MongoDB container provisioning definitions
+# Python (base container for applications containers) provisioning definitions
+#------------------------------------------------------------------------------
+  laboranalysis:
+    # Name of docker container
+    container_name: laboranalysis
+    # Refers to the location of the Dockerfile from which container 
+    # will be provisioned, is in relation to the docker-compose.yml file
+    build: ./python
+
+# MongoDB (database server container) provisioning definitions
 #------------------------------------------------------------------------------
   mongo:
     # Name of docker container
     container_name: mongo
-    # Base image from which container will be deployed
+    # Base image on which the container will be built
     image: mongo:latest
-    restart: always
-    # Map host directory with databases to container directory (host:container)
+    # Configures to restart container when it exit or failure
+    deploy:
+      restart_policy:
+        condition: any
+    # Maps host directory with databases
+    # to container directory (host directory : container directory)
     volumes:
       - /var/lib/docker/storage/laboranalysis/databases:/data/db
-    # Map host TCP port to container TCP port (host:container)
+    # Maps host TCP port to container TCP port (host port : container port)
     # We use default MongoDB ports
-    ports:
-      - 27017:27017
+    # Uncomment this ports definition only for testing purposes
+    # It will provide access from the outside of private docker networks
+    ## ports:
+    ##   - 27017:27017
+    # Attaches to 'backend' subnet which intended for database communication
+    networks:
+      - backend
 
-# Web application container provisioning definitions
+# Harvest application container provisioning definitions
+#------------------------------------------------------------------------------
+  harvest:
+    # Name of docker container
+    container_name: harvest
+    # Configures to restart container when it exit or failure
+    # with one hour interval between attempts
+    deploy:
+      restart_policy:
+        condition: any
+        delay: 1h
+    # Refers to the location of the Dockerfile from which container 
+    # will be provisioned, is in relation to the docker-compose.yml file
+    build: ./harvest
+    # Sets container start order
+    # 'mongo' container must be provisioned and start
+    # strictly before 'harvest' container
+    depends_on:
+      - mongo
+    # Containers for the linked service are reachable
+    # at a hostname identical to the alias, 
+    # or the service name if no alias was specified.
+    links:
+      - mongo
+    # Attaches to 'backend' subnet which intended for database communication
+    networks:
+      - backend
+
+# Analyze application container provisioning definitions
+#------------------------------------------------------------------------------
+  analyze:
+    # Name of docker container
+    container_name: analyze
+    # Configures to restart container when it exit or failure
+    # with 6 hour interval between attempts
+    deploy:
+      restart_policy:
+        condition: any
+        delay: 6h
+    # Refers to the location of the Dockerfile from which container 
+    # will be provisioned, is in relation to the docker-compose.yml file
+    build: ./analyze
+    # Maps host directory with analysis reports
+    # to container directory (host directory : container directory)
+    volumes:
+      - /var/lib/docker/storage/laboranalysis/reports:/var/laboranalysis/reports
+    # Sets container start order
+    # 'mongo' container must be provisioned and start
+    # strictly before 'analyze' container
+    depends_on:
+      - mongo
+    # Containers for the linked service are reachable
+    # at a hostname identical to the alias, 
+    # or the service name if no alias was specified.
+    links:
+      - mongo
+    # Attaches to 'backend' subnet which intended for database communication
+    networks:
+      - backend
+
+# Notify application container provisioning definitions
+#------------------------------------------------------------------------------
+  notify:
+    # Name of docker container
+    container_name: notify
+    # Configures to restart container when it exit or failure
+    # with 12 hour interval between attempts
+    deploy:
+      restart_policy:
+        condition: any
+        delay: 12h
+    # Refers to the location of the Dockerfile from which container 
+    # will be provisioned, is in relation to the docker-compose.yml file
+    build: ./notify
+    # Maps host directory with analysis reports
+    # to container directory (host directory : container directory)
+    volumes:
+      - /var/lib/docker/storage/laboranalysis/reports:/var/laboranalysis/reports
+    # Sets container start order
+    # 'mongo' container must be provisioned and start
+    # strictly before 'notify' container
+    depends_on:
+      - mongo
+    # Containers for the linked service are reachable
+    # at a hostname identical to the alias, 
+    # or the service name if no alias was specified.
+    links:
+      - mongo
+    # Attaches to 'backend' subnet which intended for database communication
+    networks:
+      - backend
+
+# Flask (web application container) provisioning definitions
 #------------------------------------------------------------------------------
   flask:
     # Name of docker container
     container_name: flask
-    restart: always
-    # Refers to the location the Dockerfile from which container 
+    # Configures to restart container when it exit or failure
+    deploy:
+      restart_policy:
+        condition: any
+    # Refers to the location of the Dockerfile from which container 
     # will be provisioned, is in relation to the docker-compose.yml file
     build: ./flask
-    # Map host directory with reports to container directory (host:container)
+    # Maps host directory with analysis reports
+    # to container directory (host directory : container directory)
     volumes:
       - /var/lib/docker/storage/laboranalysis/reports:/var/laboranalysis/reports
-    # Map host TCP port to container TCP port (host:container)
-    # We bind the port to 5000, which also specified in nginx.conf
-    ports:
-      - 5000:5000
-    # Sets dependency order
+    # Maps host TCP port to container TCP port (host port : container port)
+    # We bind the port number to 5000, which also specified in nginx.conf
+    # Uncomment this ports definition only for testing purposes
+    # It will provide access from the outside of private docker networks
+    ## ports:
+    ##   - 5000:5000
+    # Sets container start order
     # 'mongo' container must be provisioned and start
     # strictly before 'flask' container
     depends_on:
@@ -56,22 +181,33 @@ services:
     # or the service name if no alias was specified.
     links:
       - mongo
+    # Attaches to 'backend' subnet which intended for database communication
+    # Attaches to 'frontend' subnet which intended for http communication
+    networks:
+      - frontend
+      - backend
  
-# Reverse proxy container provisioning definitions
+# NGINX (reverse proxy container) provisioning definitions
 #------------------------------------------------------------------------------
   nginx:
     # Name of docker container
     container_name: nginx
-    restart: always
-    # Refers to the location the Dockerfile from which container 
+    # Configures to restart container when it exit or failure
+    deploy:
+      restart_policy:
+        condition: any
+    # Refers to the location of the Dockerfile from which container 
     # will be provisioned, is in relation to the docker-compose.yml file
     build: ./nginx
-    # Map host TCP port to container TCP port (host:container)
-    # We use the well-known http port is 80
+    # Maps host TCP port to container TCP port (host port : container port)
+    # We use the well-known http port which is 80
     ports:
       - 80:80
-    # Sets dependency order
+    # Sets container start order
     # 'flask' container must be provisioned and start
     # strictly before 'nginx' container
     depends_on:
       - flask
+    # Attaches to 'frontend' subnet which intended for http communication
+    networks:
+      - frontend

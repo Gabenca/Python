@@ -4,3 +4,8 @@ pymongo
 WTForms
 Flask
 Flask-WTF
+pandas
+tqdm
+lxml
+openpyxl
+bs4

@@ -1,11 +1,8 @@
 
 ###############################################################################
-#                                                                             #
-#                LABORANALYSIS DOCKERFILE (web application)                   #
-#                                                                             #
+#              LABORANALYSIS DOCKERFILE (notify application)                  #
 #          Special thanks to Miguel Grinberg (miguelgrinberg.com)             #
 #              for excellent dockerfile commands explanation                  #
-#                                                                             #
 ###############################################################################
 #  This is CONTAINER version, intended for deploying to DOCKER environment!   #
 ###############################################################################
@@ -23,7 +20,7 @@
 # installed on lightweight version of Debian 10 (Buster) Linux.
 FROM compose2_laboranalysis
 
-# Copy our web application distro files to container
+# Copy our application distro files to container
 COPY laboranalysis laboranalysis
 
 # Set new default location
@@ -41,20 +38,9 @@ RUN chown -R laboranalysis:laboranalysis ./
 # for any subsequent instructions, and also for when the container is started.
 USER laboranalysis
 
-# The 'EXPOSE' command configures the port that this container will be using
-# for its server. This is necessary so that Docker can configure the network
-# in the container appropriately. We use the standard Flask port 5000,
-# but this can be any port you preferred.
-EXPOSE 5000
-
-# The ENV command sets an environment variable inside the container.
-# I need to set FLASK_APP, which is required to use the flask command.
-ENV FLASK_APP application.py
-
 # Finally, the 'ENTRYPOINT' command defines the default command
 # that should be executed when the container is started.
-# This is the command that will start the application web server.
-ENTRYPOINT ["gunicorn"]
-# In 'CMD' we provide gunicorn flags and arguments.
-# We bind gunicorn to TCP port 5000
-CMD ["-b", ":5000", "--access-logfile", "-", "--error-logfile", "-", "wsgi:app"]
+# This is the command that will start the python interpreter.
+ENTRYPOINT ["python"]
+# In 'CMD' we provide main application file.
+CMD ["notify.py"]

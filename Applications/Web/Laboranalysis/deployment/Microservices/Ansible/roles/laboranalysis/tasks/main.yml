@@ -24,14 +24,14 @@
       - laboranalysis
 
 
-- name: Create directories for xlsx reports
-  file:
-    path: "{{ item }}"
-    state: directory
-    mode: 0755
-    owner: laboranalysis
-    group: laboranalysis
-  loop: "{{ reports_path }}"
-  tags:
-    - files
-    - laboranalysis
+  - name: Create directories for xlsx reports
+    file:
+      path: "{{ item }}"
+      state: directory
+      mode: 0777
+      owner: laboranalysis
+      group: laboranalysis
+    loop: "{{ reports_path }}"
+    tags:
+      - files
+      - laboranalysis

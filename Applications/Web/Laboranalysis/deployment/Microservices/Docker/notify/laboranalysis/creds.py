@@ -1,0 +1,17 @@
+
+###############################################################################
+#                This file collects some secrets, passwords,
+#              authentications, authorizations, keys an so on.
+###############################################################################
+
+# MongoDB access string
+mongo = 'mongodb://mongo:27017'
+
+# Filesystem path where xlsx reports take place
+store_path = '/var/laboranalysis/reports'
+
+# E-mail credentials
+mail_creds = { 'admin': 'mail@.gmail.com',
+               'source': 'mail@.yandex.ru',
+               'password': 'xxx',
+               'smtp_server': 'smtp.yandex.com', }

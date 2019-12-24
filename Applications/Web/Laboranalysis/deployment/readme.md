@@ -3,6 +3,6 @@
 
 ### Two types of the application architecture are:
 
-* **Monolithic (uses full fleged OS environment)**
+* Monolithic (uses full fleged OS environment)
 
-* **Microservices (uses Docker engined environment)**
+* Microservices (uses Docker engined environment)
