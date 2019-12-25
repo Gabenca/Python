@@ -2,12 +2,13 @@
 #!/usr/bin/env python3
 
 ###############################################################################
-# This application handle web forms, that offers list of analysis reports,
-# vacancies analysis report request and resume analysis report request.
-# Under the hood, it lists local directory content with xslx report files,
-# and generates hyperlinks to it.
+#                     LABORANALYSIS (web application)                         #
+#   This application handle web forms, that offers list of analysis reports,  #
+#     vacancies analysis report request and resume analysis report request.   #
+#   Under the hood, it lists local directory content with xslx report files,  #
+#                      and generates hyperlinks to it.                        #
 ###############################################################################
-####   This is SERVER version, intended for deploying to OS environment!   ####
+#  This is CONTAINER version, intended for deploying to DOCKER environment!   #
 ###############################################################################
 
 # Import required modules
@@ -64,8 +65,8 @@ error = 'Пожалуйста, заполните все имеющиеся по
 def add_order_to_mongo(email, occupation=None, criteria=None):
     # Instantiate MongoDB connection context
     with MongoClient(mongo) as mongodb:
-        # Connection to 'orders' collection of 'hh_reports' database
-        collection = mongodb.hh_reports['orders']
+        # Connection to 'harvest' collection of 'hh_orders' database
+        collection = mongodb.hh_orders['harvest']
         # Put request order
         if occupation:
             # If vacancy request

@@ -3,10 +3,11 @@
 
 ###############################################################################
 #                     LABORANALYSIS (analyzing service)                       #
-#              This script runs by OS timer and analyze data.                 #
-#           After, it stores report to the appropriate directory              #
-#     If any exists, it starts data harvest and stores results to MongoDB     #
-#      Always sends email notification with results to application admin      #
+#                This script searches freshly ordered reports.                #
+#                    If any exists, it starts data analysis.                  #
+#                  and stores results to apropriate directory.                #
+# Then, moves completed order to another collection for next service staging. #
+#      Always sends email notification with results to application admin.     #
 ###############################################################################
 #  This is CONTAINER version, intended for deploying to DOCKER environment!   #
 ###############################################################################
@@ -15,34 +16,47 @@
 from pymongo import MongoClient
 # Our send mail class:
 from mailsender import MailSender
+# Application delay to become idle
+from time import sleep
 # Our credentials:
 from credentials import mongo, mail_creds
 
 # Email message subjects
-problem = 'Laboranalysis application ran into an issue'
-success = 'Ваш отчёт готов!'
+problem = 'Analyze application ran into an issue'
+success = 'Analyze application completes successfully'
 
-# This function tries to get an orders from MongoDB
+# This function tries to get an orders from MongoDB,
+# and starts data analysis process if any exists.
 def get_orders_from_mongo():
     # Instantiate MongoDB connection context
     with MongoClient(mongo) as mongodb:
-        # Connection to 'orders' collection of 'hh_reports' database
-        collection = mongodb.hh_reports['orders']
+        # Connection to 'analyze' collection of 'hh_orders' database
+        collection = mongodb.hh_orders['analyze']
         # Search for orders
         orders = list(collection.find({}))
-        # Collections names in 'hh_vacancies' database
-        vacancies = mongodb.hh_vacancies.list_collection_names()
-        # Collections names in 'hh_resumes' database
-        resumes = mongodb.hh_resumes.list_collection_names()
-
+        # If any exists
         if orders:
             for order in orders:
-                if order.get('occupation') in vacancies and 'occupation' in order.keys():
+                if 'occupation' in order.keys():
                     # If it's vacancy order
                     start_vacancies_analyze(order)
                     # If it's resume order
-                if order.get('criteria') in resumes and 'criteria' in order.keys():
+                if 'criteria' in order.keys():
                         start_resumes_analyze(order)
+
+# This function changes an analyze order status from staging to complete,
+# by moving an order document from 'analyze' collection to 'notify' collection
+def change_order_status(order):
+    # Instantiate MongoDB connection context
+    with MongoClient(mongo) as mongodb:
+        # Connection to 'notify' collection of 'hh_orders' database
+        collection = mongodb.hh_orders['notify']
+        # Put completed order
+        collection.insert_one(order)
+        # Connection to 'analyze' collection of 'hh_orders' database
+        collection = mongodb.hh_orders['analyze']
+        # Drop completed order
+        collection.delete_one(order)  
 
 # This function makes vacancies analyze process
 def start_vacancies_analyze(order):
@@ -54,6 +68,7 @@ def start_vacancies_analyze(order):
         vacancies.restore_vacancies_from_mongo()
         vacancies.analyze()
         vacancies.store_results_to_xlsx()
+        change_order_status(order)
     # If run into an issue, notificates application admin
     except:
         mail = MailSender( [mail_creds['admin']], 
@@ -76,6 +91,7 @@ def start_resumes_analyze(order):
         resumes.restore_resumes_from_mongo()
         resumes.analyze()
         resumes.store_results_to_xlsx()
+        change_order_status(order)
     # If run into an issue, notificates application admin
     except:
         mail = MailSender( [mail_creds['admin']], 
@@ -91,6 +107,12 @@ def start_resumes_analyze(order):
 
 # Checks importing issue
 if __name__ == "__main__":
-    # Start work
-    get_orders_from_mongo()
+    # Endless loop
+    while True:
+        # Buffer start interval
+        sleep(10)
+        # Checks for new orders
+        get_orders_from_mongo()
+        # Go to bed for 1 hour
+        sleep(3600)
     
