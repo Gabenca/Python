@@ -6,13 +6,16 @@ The root contains two directories and one shell script:
 
 * **playbooks**
 * **roles**
-* **ansible.addrepo**
+* **ansible-repo.sh**
 
 ### playbooks directory
 > Contains Ansible playbooks which runs directly
 
 ### roles directory
 > Contains Ansible roles which include into playbooks and runs indirectly
+
+### ansible-repo.sh
+> Shell script which adds Ansible repository to OS
 
 ### Application server Ansible CM configuration directory structure
 
@@ -44,9 +47,9 @@ The root contains two directories and one shell script:
 
         root@server:~# cd Python/Applications/Web/Laboranalysis/deployment/Microservices/Ansible
 
-* **Run 'ansible.addrepo' script**
+* **Run 'ansible-repo.sh' script**
 
-        root@server:~# /bin/sh ansible.addrepo
+        root@server:~# /bin/sh ansible-repo.sh
 
 * **Update package manager cache**
 
