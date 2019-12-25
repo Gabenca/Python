@@ -93,9 +93,11 @@ def add_order_to_mongo(email, occupation=None, criteria=None):
                                 str(order) )
             mail.send_email()
 
-# This function forms list of xlsx report files from 'store_path' dir.
+# This function forms list of xlsx report files from 'store_path' directory.
 def get_reports_list(report_type):
+    # Forms path to directory with xlsx reports
     path = os.path.join(store_path, report_type)
+    # Forms list of available reports from xlsx files located in the directory
     reports = [report.split('.')[0] 
         for report in os.listdir(path) 
             if os.path.isfile(os.path.join(path, report))]

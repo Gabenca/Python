@@ -4,7 +4,7 @@
 ###############################################################################
 #                     LABORANALYSIS (analyzing service)                       #
 #                This script searches freshly ordered reports.                #
-#                    If any exists, it starts data analysis.                  #
+#                    If any exists, it starts data analysis,                  #
 #                  and stores results to apropriate directory.                #
 # Then, moves completed order to another collection for next service staging. #
 #      Always sends email notification with results to application admin.     #
